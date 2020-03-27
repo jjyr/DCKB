@@ -24,11 +24,11 @@ Defines commonly used high level functions and constants.
 #define ERROR_PUBKEY_BLAKE160_HASH -31
 /* anyone can pay errors */
 #define ERROR_OVERFLOW -41
-#define ERROR_OUTPUT_AMOUNT_NOT_ENOUGH -42
-#define ERROR_TOO_MUCH_TYPE_HASH_INPUTS -43
-#define ERROR_NO_PAIR -44
-#define ERROR_DUPLICATED_INPUTS -45
-#define ERROR_DUPLICATED_OUTPUTS -46
+#define ERROR_INCORRECT_OUTPUT_WCKB -42
+#define ERROR_TOO_MANY_SWAPS -43
+#define ERROR_INCORRECT_UNINIT_OUTPUT_WCKB -44
+#define ERROR_ALIGN -45
+#define ERROR_OUTPUT_ALIGN -46
 
 /* since */
 #define SINCE_VALUE_BITS 56

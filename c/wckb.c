@@ -5,7 +5,8 @@
  * corresponded WCKB.
  *
  * WCKB format:
- * tokens(16 bytes) | height(8 bytes)
+ * args: dao_type_id (32 bytes)
+ * data: tokens(16 bytes) | height(8 bytes)
  * > 16 bytes u128 number to store the TOKEN.
  * > 8 bytes u64 number to store the block number.
  *
@@ -59,11 +60,12 @@
 #define MAX_HEADER_SIZE 32768
 #define MAX_SWAPS 256
 
-const uint8_t NERVOS_DAO_TYPE_HASH[] = {
-    0xe2, 0x89, 0x68, 0x9d, 0xb0, 0x10, 0xe2, 0x73, 0x58, 0x04, 0x5c,
-    0xbc, 0x74, 0xef, 0x9c, 0xc4, 0xe7, 0x7e, 0xb7, 0xe5, 0x2c, 0x3e,
-    0x42, 0x44, 0x7d, 0x2c, 0x00, 0xc9, 0xe2, 0x4a, 0xec, 0x08};
+const uint8_t NERVOS_DAO_DATA_HASH[] = {
+    0x32, 0x06, 0x4a, 0x14, 0xce, 0x10, 0xd9, 0x5d, 0x4b, 0x73, 0x43,
+    0x05, 0x4c, 0xc1, 0x9d, 0x73, 0xb2, 0x5b, 0x16, 0xae, 0x61, 0xa6,
+    0xc6, 0x81, 0x01, 0x1c, 0xa7, 0x81, 0xa6, 0x0c, 0x79, 0x23};
 
+static unsigned char dao_type_id[BLAKE2B_BLOCK_SIZE];
 static char dbuf[100];
 
 typedef struct {
@@ -76,13 +78,85 @@ typedef struct {
   uint128_t amount;
 } TokenInfo;
 
-int is_dao_deposit_cell(unsigned char *cell_type_hash, uint8_t *data,
-                        uint64_t data_len) {
+int read_dao_type_id(unsigned char *dao_type_id) {
+  int ret;
+  unsigned char script[SCRIPT_SIZE];
+  uint64_t len = 0;
+  mol_seg_t script_seg;
+  mol_seg_t args_seg;
+  mol_seg_t bytes_seg;
+  len = SCRIPT_SIZE;
+  ret = ckb_load_script(script, &len, 0);
+  if (ret != CKB_SUCCESS) {
+    return ERROR_SYSCALL;
+  }
+  if (len > SCRIPT_SIZE) {
+    return ERROR_SCRIPT_TOO_LONG;
+  }
+  script_seg.ptr = (uint8_t *)script;
+  script_seg.size = len;
+  if (MolReader_Script_verify(&script_seg, false) != MOL_OK) {
+    return ERROR_ENCODING;
+  }
+  args_seg = MolReader_Script_get_args(&script_seg);
+  bytes_seg = MolReader_Bytes_raw_bytes(&args_seg);
+  if (bytes_seg.size != BLAKE2B_BLOCK_SIZE) {
+    sprintf(dbuf, "read dao_type_id len %d, script_seg len %d", bytes_seg.size,
+            script_seg.size);
+    ckb_debug(dbuf);
+    return ERROR_ENCODING;
+  }
+  memcpy(dao_type_id, bytes_seg.ptr, BLAKE2B_BLOCK_SIZE);
+  return CKB_SUCCESS;
+}
+
+int is_dao_type(size_t i, int source, int *dao_type) {
+  unsigned char script[SCRIPT_SIZE];
+  uint64_t len = 0;
+  mol_seg_t script_seg;
+  mol_seg_t code_hash_seg;
+  mol_seg_t hash_type_seg;
+  len = SCRIPT_SIZE;
+  int ret = ckb_checked_load_cell_by_field(script, &len, 0, i, source,
+                                           CKB_CELL_FIELD_TYPE);
+  if (ret == CKB_ITEM_MISSING) {
+  }
+  if (ret != CKB_SUCCESS) {
+    return ret;
+  }
+  if (len > SCRIPT_SIZE) {
+    return ERROR_SCRIPT_TOO_LONG;
+  }
+  script_seg.ptr = (uint8_t *)script;
+  script_seg.size = len;
+  if (MolReader_Script_verify(&script_seg, false) != MOL_OK) {
+    return ERROR_ENCODING;
+  }
+  code_hash_seg = MolReader_Script_get_code_hash(&script_seg);
+  hash_type_seg = MolReader_Script_get_hash_type(&script_seg);
+  if (hash_type_seg.ptr[0] == 0) {
+    /* data */
+    ret = memcmp(NERVOS_DAO_DATA_HASH, code_hash_seg.ptr, BLAKE2B_BLOCK_SIZE);
+  } else {
+    /* type */
+    ret = memcmp(dao_type_id, code_hash_seg.ptr, BLAKE2B_BLOCK_SIZE);
+  }
+  *dao_type = ret == 0;
+  return CKB_SUCCESS;
+}
+
+int is_dao_deposit_cell(size_t i, int source, uint8_t *data, uint64_t data_len,
+                        int *is_dao) {
   static uint8_t empty[] = {0, 0, 0, 0, 0, 0, 0, 0};
-  return (memcmp(cell_type_hash, NERVOS_DAO_TYPE_HASH, BLAKE2B_BLOCK_SIZE) ==
-          0) &&
-         (data_len == BLOCK_NUM_LEN) &&
-         (memcmp(data, empty, BLOCK_NUM_LEN) == 0);
+  if (data_len != BLOCK_NUM_LEN) {
+    *is_dao = 0;
+    return CKB_SUCCESS;
+  }
+  if (memcmp(data, empty, BLOCK_NUM_LEN) != 0) {
+    *is_dao = 0;
+    return CKB_SUCCESS;
+  }
+  return is_dao_type(i, source, is_dao);
 }
 
 int load_align_target_header(uint64_t *index) {
@@ -122,23 +196,18 @@ int load_align_target_header(uint64_t *index) {
   return CKB_SUCCESS;
 }
 
-int is_dao_withdraw1_cell(unsigned char *cell_type_hash, uint8_t *data,
-                          uint64_t data_len) {
+int is_dao_withdraw1_cell(size_t i, uint64_t source, uint8_t *data,
+                          uint64_t data_len, int *is_dao) {
   if (data_len != BLOCK_NUM_LEN) {
-    return 0;
+    *is_dao = 0;
+    return CKB_SUCCESS;
   }
   uint64_t block_number = *(uint64_t *)data;
   if (block_number == 0) {
-    return 0;
+    *is_dao = 0;
+    return CKB_SUCCESS;
   }
-  int is_dao_type =
-      memcmp(cell_type_hash, NERVOS_DAO_TYPE_HASH, BLAKE2B_BLOCK_SIZE) == 0;
-  sprintf(dbuf, "check is_dao_type %d", is_dao_type);
-  ckb_debug(dbuf);
-  if (!is_dao_type) {
-    return 0;
-  }
-  return 1;
+  return is_dao_type(i, source, is_dao);
 }
 
 /* check inputs, return input WCKB */
@@ -181,7 +250,12 @@ int fetch_inputs(unsigned char *type_hash, int *withdraw_dao_cnt,
     if (ret != CKB_SUCCESS || len > UDT_LEN + BLOCK_NUM_LEN) {
       return ERROR_ENCODING;
     }
-    if (is_dao_withdraw1_cell(input_type_hash, buf, len)) {
+    int is_dao = 0;
+    ret = is_dao_withdraw1_cell(i, CKB_SOURCE_INPUT, buf, len, &is_dao);
+    if (ret != CKB_SUCCESS) {
+      return ret;
+    }
+    if (is_dao) {
       ckb_debug("check a new withdraw cell");
       /* withdraw NervosDAO */
       uint64_t deposited_block_number = *(uint64_t *)buf;
@@ -305,7 +379,12 @@ int fetch_outputs(unsigned char *wckb_type_hash, uint64_t align_block_number,
     if (ret != CKB_SUCCESS || len > (UDT_LEN + BLOCK_NUM_LEN)) {
       return ERROR_ENCODING;
     }
-    if (is_dao_deposit_cell(output_type_hash, buf, len)) {
+    int is_dao = 0;
+    ret = is_dao_deposit_cell(i, CKB_SOURCE_OUTPUT, buf, len, &is_dao);
+    if (ret != CKB_SUCCESS) {
+      return ret;
+    }
+    if (is_dao) {
       ckb_debug("check a new deposit cell");
       /* check deposited dao cell */
       uint64_t amount;
@@ -453,6 +532,12 @@ int main() {
   sprintf(dbuf, "load self script ret %d", ret);
   ckb_debug(dbuf);
   if (ret != CKB_SUCCESS || len != BLAKE2B_BLOCK_SIZE) {
+    return ERROR_SYSCALL;
+  }
+  ret = read_dao_type_id(dao_type_id);
+  sprintf(dbuf, "read dao type id ret %d", ret);
+  ckb_debug(dbuf);
+  if (ret != CKB_SUCCESS) {
     return ERROR_SYSCALL;
   }
   /* load aligned target header */

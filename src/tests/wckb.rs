@@ -43,11 +43,14 @@ lazy_static! {
     static ref WCKB_CAPACITY: Capacity = Capacity::bytes(65).expect("bytes");
 }
 
+const DAO_TYPE_ID: [u8; 32] = [0u8; 32];
+
 fn wckb_script() -> Script {
     let code_hash = CellOutput::calc_data_hash(&WCKB);
     Script::new_builder()
         .code_hash(code_hash)
         .hash_type(ScriptHashType::Data.into())
+        .args(Bytes::from(DAO_TYPE_ID.to_vec()).pack())
         .build()
 }
 
@@ -103,10 +106,6 @@ fn dao_code_hash() -> Byte32 {
     CellOutput::calc_data_hash(&DAO_BIN)
 }
 
-fn wckb_code_hash() -> Byte32 {
-    CellOutput::calc_data_hash(&WCKB)
-}
-
 fn gen_normal_cell(
     dummy: &mut DummyDataLoader,
     capacity: Capacity,
@@ -143,11 +142,7 @@ fn gen_wckb_cell(
         .code_hash(secp_code_hash())
         .hash_type(ScriptHashType::Data.into())
         .build();
-    let type_ = Script::new_builder()
-        .args(Bytes::new().pack())
-        .code_hash(wckb_code_hash())
-        .hash_type(ScriptHashType::Data.into())
-        .build();
+    let type_ = wckb_script();
     let cell = CellOutput::new_builder()
         .capacity(WCKB_CAPACITY.pack())
         .lock(lock)
@@ -456,7 +451,7 @@ fn test_wckb_transfer() {
         .input(CellInput::new(wckb_previous_out_point1, 0))
         .input(CellInput::new(wckb_previous_out_point2, 0))
         .output(wckb_cell_output())
-        .output_data(wckb_data(90009_98820000, header2.number()).pack())
+        .output_data(wckb_data(90009_98500000, header2.number()).pack())
         .output(wckb_cell_output())
         .output_data(wckb_data(60000_00000000, header2.number()).pack())
         .header_dep(header1.hash())

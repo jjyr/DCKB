@@ -19,7 +19,7 @@ const BINARIES: &[(&str, &str)] = &[
     ),
     (
         "wckb",
-        "27443b06120b1f5687a83c5523fa98fe971390b4d961f3ff4f20e5f5b3acb5c2",
+        "204d4c896fa3563787b4325ec1a99234941b8692c020a67ee7a7c2d028f99206",
     ),
 ];
 

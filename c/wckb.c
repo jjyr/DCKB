@@ -192,7 +192,7 @@ int load_align_target_header(uint64_t *index) {
     return ERROR_ENCODING;
   }
 
-  *index = *type_bytes_seg.ptr;
+  *index = *(uint64_t *)type_bytes_seg.ptr;
   return CKB_SUCCESS;
 }
 

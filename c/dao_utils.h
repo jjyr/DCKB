@@ -160,6 +160,10 @@ int calculate_dao_input_capacity(uint64_t occupied_capacity,
   uint64_t counted_capacity = 0;
   if (__builtin_usubl_overflow(original_capacity, occupied_capacity,
                                &counted_capacity)) {
+    char dbuf[100];
+    sprintf(dbuf, "original_capacity %ld occupied_capacity %ld",
+            original_capacity, occupied_capacity);
+    ckb_debug(dbuf);
     return ERROR_OVERFLOW;
   }
 
@@ -171,6 +175,10 @@ int calculate_dao_input_capacity(uint64_t occupied_capacity,
   if (__builtin_uaddl_overflow(occupied_capacity,
                                (uint64_t)withdraw_counted_capacity,
                                &withdraw_capacity)) {
+    char dbuf[100];
+    sprintf(dbuf, "original_capacity %ld occupied_capacity %ld",
+            original_capacity, (uint64_t)withdraw_counted_capacity);
+    ckb_debug(dbuf);
     return ERROR_OVERFLOW;
   }
 

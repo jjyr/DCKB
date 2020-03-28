@@ -412,6 +412,7 @@ dependencies = [
  "ckb-error",
  "ckb-hash",
  "ckb-script",
+ "ckb-system-scripts 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "ckb-types",
  "faster-hex 0.3.1",
  "includedir",
@@ -422,6 +423,19 @@ dependencies = [
  "ripemd160",
  "secp256k1",
  "sha2",
+]
+
+[[package]]
+name = "ckb-system-scripts"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "261dd95a93c09ea24397c85b4fbca061e1da2d6573189749aeb99fe840aaf0c9"
+dependencies = [
+ "blake2b-rs",
+ "faster-hex 0.3.1",
+ "includedir",
+ "includedir_codegen",
+ "phf",
 ]
 
 [[package]]

@@ -10,10 +10,12 @@
  * > 8 bytes u64 number to store the block number.
  *
  * Align block number:
- * Update the height of WCKB to a higher block number, and update the amount by
- * apply NervosDAO formula. All WCKB cell will align to the first input WCKB's
- * block number, so the first input WCKB must has higher block number than
- * others.
+ * > Align block number is a u64 number indicates to dep_headers,
+ *   denoted by the first WCKB input's witness type args.
+ * > All outputs WCKB cell's must aligned to the header,
+ *   which means the header number should heigher than or at least equals to
+ * WCKB cells. > Align means that we update the height of WCKB, and update the
+ * amount by apply NervosDAO formula.
  *
  * Verification:
  * This type script make sure the equation between inputs and outputs(all coins
@@ -58,9 +60,11 @@
 #define MAX_SWAPS 256
 
 const uint8_t NERVOS_DAO_TYPE_HASH[] = {
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-};
+    0xe2, 0x89, 0x68, 0x9d, 0xb0, 0x10, 0xe2, 0x73, 0x58, 0x04, 0x5c,
+    0xbc, 0x74, 0xef, 0x9c, 0xc4, 0xe7, 0x7e, 0xb7, 0xe5, 0x2c, 0x3e,
+    0x42, 0x44, 0x7d, 0x2c, 0x00, 0xc9, 0xe2, 0x4a, 0xec, 0x08};
+
+static char dbuf[100];
 
 typedef struct {
   unsigned char lock_hash[BLAKE2B_BLOCK_SIZE];
@@ -81,13 +85,60 @@ int is_dao_deposit_cell(unsigned char *cell_type_hash, uint8_t *data,
          (memcmp(data, empty, BLOCK_NUM_LEN) == 0);
 }
 
+int load_align_target_header(uint64_t *index) {
+  int ret;
+  uint64_t len = 0;
+  unsigned char witness[MAX_WITNESS_SIZE];
+
+  len = MAX_WITNESS_SIZE;
+  ret = ckb_load_witness(witness, &len, 0, 0, CKB_SOURCE_GROUP_INPUT);
+  if (ret != CKB_SUCCESS) {
+    return ret;
+  }
+  if (len > MAX_WITNESS_SIZE) {
+    return ERROR_WITNESS_TOO_LONG;
+  }
+
+  mol_seg_t witness_seg;
+  witness_seg.ptr = (uint8_t *)witness;
+  witness_seg.size = len;
+
+  if (MolReader_WitnessArgs_verify(&witness_seg, false) != MOL_OK) {
+    return ERROR_ENCODING;
+  }
+  /* Load type args */
+  mol_seg_t type_seg = MolReader_WitnessArgs_get_input_type(&witness_seg);
+
+  if (MolReader_BytesOpt_is_none(&type_seg)) {
+    return ERROR_ENCODING;
+  }
+
+  mol_seg_t type_bytes_seg = MolReader_Bytes_raw_bytes(&type_seg);
+  if (type_bytes_seg.size != 8) {
+    return ERROR_ENCODING;
+  }
+
+  *index = *type_bytes_seg.ptr;
+  return CKB_SUCCESS;
+}
+
 int is_dao_withdraw1_cell(unsigned char *cell_type_hash, uint8_t *data,
                           uint64_t data_len) {
-  static uint8_t empty[] = {0, 0, 0, 0, 0, 0, 0, 0};
-  return (memcmp(cell_type_hash, NERVOS_DAO_TYPE_HASH, BLAKE2B_BLOCK_SIZE) ==
-          0) &&
-         (data_len == BLOCK_NUM_LEN) &&
-         (memcmp(data, empty, BLOCK_NUM_LEN) != 0);
+  if (data_len != BLOCK_NUM_LEN) {
+    return 0;
+  }
+  uint64_t block_number = *(uint64_t *)data;
+  if (block_number == 0) {
+    return 0;
+  }
+  int is_dao_type =
+      memcmp(cell_type_hash, NERVOS_DAO_TYPE_HASH, BLAKE2B_BLOCK_SIZE) == 0;
+  sprintf(dbuf, "check is_dao_type %d", is_dao_type);
+  ckb_debug(dbuf);
+  if (!is_dao_type) {
+    return 0;
+  }
+  return 1;
 }
 
 /* check inputs, return input WCKB */
@@ -113,6 +164,8 @@ int fetch_inputs(unsigned char *type_hash, int *withdraw_dao_cnt,
       i++;
       continue;
     }
+    sprintf(dbuf, "load cell type ret %d len %ld", ret, len);
+    ckb_debug(dbuf);
     if (ret != CKB_SUCCESS || len != BLAKE2B_BLOCK_SIZE) {
       return ERROR_ENCODING;
     }
@@ -123,10 +176,13 @@ int fetch_inputs(unsigned char *type_hash, int *withdraw_dao_cnt,
       i++;
       continue;
     }
+    sprintf(dbuf, "load input cell data ret %d len %ld", ret, len);
+    ckb_debug(dbuf);
     if (ret != CKB_SUCCESS || len > UDT_LEN + BLOCK_NUM_LEN) {
       return ERROR_ENCODING;
     }
     if (is_dao_withdraw1_cell(input_type_hash, buf, len)) {
+      ckb_debug("check a new withdraw cell");
       /* withdraw NervosDAO */
       uint64_t deposited_block_number = *(uint64_t *)buf;
       size_t deposit_index;
@@ -168,7 +224,7 @@ int fetch_inputs(unsigned char *type_hash, int *withdraw_dao_cnt,
       /* WCKB */
       uint128_t amount;
       uint64_t block_number;
-      if (len != UDT_LEN) {
+      if (len != UDT_LEN + BLOCK_NUM_LEN) {
         return ERROR_ENCODING;
       }
       amount = *(uint128_t *)buf;
@@ -250,6 +306,7 @@ int fetch_outputs(unsigned char *wckb_type_hash, uint64_t align_block_number,
       return ERROR_ENCODING;
     }
     if (is_dao_deposit_cell(output_type_hash, buf, len)) {
+      ckb_debug("check a new deposit cell");
       /* check deposited dao cell */
       uint64_t amount;
       unsigned char lock_hash[BLAKE2B_BLOCK_SIZE];
@@ -280,7 +337,7 @@ int fetch_outputs(unsigned char *wckb_type_hash, uint64_t align_block_number,
           return ERROR_TOO_MANY_SWAPS;
         }
         int new_i = *deposited_dao_cnt;
-        deposited_dao_cnt++;
+        *deposited_dao_cnt += 1;
         deposited_dao[new_i].amount = amount;
         memcpy(deposited_dao[new_i].lock_hash, lock_hash, BLAKE2B_BLOCK_SIZE);
       }
@@ -354,11 +411,14 @@ int align_dao(size_t i, size_t source, dao_header_data_t align_target_data,
               uint64_t deposited_block_number, uint64_t original_capacity,
               uint64_t *calculated_capacity) {
   if (align_target_data.block_number == deposited_block_number) {
-    original_capacity = *calculated_capacity;
+    *calculated_capacity = original_capacity;
     return CKB_SUCCESS;
   }
 
   if (align_target_data.block_number < deposited_block_number) {
+    sprintf(dbuf, "align %ld deposit block %ld", align_target_data.block_number,
+            deposited_block_number);
+    ckb_debug(dbuf);
     return ERROR_ALIGN;
   }
   uint64_t occupied_capacity;
@@ -384,19 +444,35 @@ int align_dao(size_t i, size_t source, dao_header_data_t align_target_data,
 }
 
 int main() {
+  ckb_debug("hello");
   int ret;
   unsigned char type_hash[BLAKE2B_BLOCK_SIZE];
   uint64_t len = BLAKE2B_BLOCK_SIZE;
   /* load self type hash */
   ret = ckb_load_script_hash(type_hash, &len, 0);
+  sprintf(dbuf, "load self script ret %d", ret);
+  ckb_debug(dbuf);
   if (ret != CKB_SUCCESS || len != BLAKE2B_BLOCK_SIZE) {
     return ERROR_SYSCALL;
   }
   /* load aligned target header */
+  uint64_t align_header_index = 0;
+  ret = load_align_target_header(&align_header_index);
+  sprintf(dbuf, "load aligned target ret %d", ret);
+  ckb_debug(dbuf);
+  if (ret != CKB_SUCCESS && ret != CKB_INDEX_OUT_OF_BOUND) {
+    return ret;
+  }
+  int has_align_header = ret == CKB_SUCCESS;
   dao_header_data_t align_target_data;
-  ret = load_dao_header_data(0, CKB_SOURCE_GROUP_INPUT, &align_target_data);
-  if (ret != CKB_SUCCESS) {
-    return ERROR_ENCODING;
+  if (has_align_header) {
+    ret = load_dao_header_data(align_header_index, CKB_SOURCE_HEADER_DEP,
+                               &align_target_data);
+    sprintf(dbuf, "load aligned header ret %d", ret);
+    ckb_debug(dbuf);
+    if (ret != CKB_SUCCESS && ret != CKB_INDEX_OUT_OF_BOUND) {
+      return ERROR_LOAD_HEADER;
+    }
   }
 
   /* fetch inputs */
@@ -406,6 +482,8 @@ int main() {
   int input_wckb_cnt;
   ret = fetch_inputs(type_hash, &withdraw_dao_cnt, withdraw_dao_infos,
                      &input_wckb_cnt, input_wckb_infos);
+  sprintf(dbuf, "fetch inputs ret %d", ret);
+  ckb_debug(dbuf);
   if (ret != CKB_SUCCESS) {
     return ret;
   }
@@ -420,9 +498,14 @@ int main() {
                       &deposited_dao_cnt, deposited_dao,
                       &output_uninit_wckb_cnt, output_uninit_wckb,
                       &output_inited_wckb_cnt, output_inited_wckb);
+  sprintf(dbuf, "fetch outputs ret %d", ret);
+  ckb_debug(dbuf);
   if (ret != CKB_SUCCESS) {
     return ret;
   }
+  sprintf(dbuf, "deposited_dao_cnt %d output_uninit_cnt %d output_init_cnt %d",
+          deposited_dao_cnt, output_uninit_wckb_cnt, output_inited_wckb_cnt);
+  ckb_debug(dbuf);
   /* check equations
    * 1. inputs WCKB - withdraw NervosDAO == outputs WCKB
    * 2. uninited WCKB == deposited NervosDAO
@@ -436,6 +519,10 @@ int main() {
     if (ret != CKB_SUCCESS) {
       return ret;
     }
+    sprintf(dbuf, "withdraw dao deposit at %ld money %ld calculated %ld",
+            withdraw_dao_infos[i].block_number,
+            (uint64_t)withdraw_dao_infos[i].amount, calculated_capacity);
+    ckb_debug(dbuf);
     total_withdraw_dao += calculated_capacity;
   }
 
@@ -463,6 +550,11 @@ int main() {
 
   /* 1. inputs WCKB - withdraw NervosDAO == outputs WCKB */
   if (!(total_input_wckb - total_withdraw_dao == total_output_wckb)) {
+    sprintf(dbuf,
+            "equation 1 total_input_wckb %ld total_withdraw_dao %ld "
+            "total_output_wckb %ld",
+            total_input_wckb, total_withdraw_dao, total_output_wckb);
+    ckb_debug(dbuf);
     return ERROR_INCORRECT_OUTPUT_WCKB;
   }
 
@@ -472,12 +564,18 @@ int main() {
     int found = find_swap_by_lock_hash(deposited_dao, deposited_dao_cnt,
                                        output_uninit_wckb[i].lock_hash);
     if (found < 0) {
+      ckb_debug("can't found deposit dao");
       return ERROR_INCORRECT_UNINIT_OUTPUT_WCKB;
     }
     if (output_uninit_wckb[i].amount != deposited_dao[found].amount) {
+      sprintf(dbuf, "uninit amount %ld, deposited_dao amount %ld",
+              (uint64_t)output_uninit_wckb[i].amount,
+              (uint64_t)deposited_dao[found].amount);
+      ckb_debug(dbuf);
       return ERROR_INCORRECT_UNINIT_OUTPUT_WCKB;
     }
   }
 
+  ckb_debug("bye");
   return CKB_SUCCESS;
 }

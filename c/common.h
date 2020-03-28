@@ -12,6 +12,7 @@ Defines commonly used high level functions and constants.
 #define ERROR_ARGUMENTS_LEN -1
 #define ERROR_ENCODING -2
 #define ERROR_SYSCALL -3
+#define ERROR_LOAD_HEADER -4
 #define ERROR_SECP_RECOVER_PUBKEY -11
 #define ERROR_SECP_VERIFICATION -12
 #define ERROR_SECP_PARSE_PUBKEY -13

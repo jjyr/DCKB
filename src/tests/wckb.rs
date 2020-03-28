@@ -515,14 +515,21 @@ fn test_wckb_deposit() {
     let resolved_inputs = vec![input_cell_meta];
     let mut resolved_cell_deps = vec![];
 
+    let change_coin = 61;
+    let (change_output_cell, _) = gen_normal_cell(
+        &mut data_loader,
+        Capacity::shannons(change_coin),
+        lock_args.clone(),
+    );
+
     let (output_cell, _) = gen_dao_cell(
         &mut data_loader,
-        Capacity::shannons(123456780000 - WCKB_CAPACITY.as_u64()),
+        Capacity::shannons(123456780000 - WCKB_CAPACITY.as_u64() - change_coin),
         lock_args.clone(),
     );
     let (wckb_output_cell, _, wckb_output_data) = gen_wckb_cell(
         &mut data_loader,
-        Capacity::shannons(123456780000 - WCKB_CAPACITY.as_u64()),
+        Capacity::shannons(123456780000 - WCKB_CAPACITY.as_u64() - change_coin),
         lock_args,
         0,
     );
@@ -534,6 +541,8 @@ fn test_wckb_deposit() {
         .output_data(Bytes::from(b.to_vec()).pack())
         .output(wckb_output_cell)
         .output_data(wckb_output_data.pack())
+        .output(change_output_cell)
+        .output_data(Bytes::new().pack())
         .witness(WitnessArgs::default().as_bytes().pack());
     let (tx, mut resolved_cell_deps2) = complete_tx(&mut data_loader, builder);
     let tx = sign_tx(tx, &privkey);

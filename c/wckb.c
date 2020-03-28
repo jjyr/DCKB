@@ -644,21 +644,21 @@ int main() {
   }
 
   /* 2. uninited WCKB == deposited NervosDAO */
-
+  uint64_t total_uninited_output_wckb = 0;
   for (int i = 0; i < output_uninit_wckb_cnt; i++) {
-    int found = find_swap_by_lock_hash(deposited_dao, deposited_dao_cnt,
-                                       output_uninit_wckb[i].lock_hash);
-    if (found < 0) {
-      ckb_debug("can't found deposit dao");
-      return ERROR_INCORRECT_UNINIT_OUTPUT_WCKB;
-    }
-    if (output_uninit_wckb[i].amount != deposited_dao[found].amount) {
-      sprintf(dbuf, "uninit amount %ld, deposited_dao amount %ld",
-              (uint64_t)output_uninit_wckb[i].amount,
-              (uint64_t)deposited_dao[found].amount);
-      ckb_debug(dbuf);
-      return ERROR_INCORRECT_UNINIT_OUTPUT_WCKB;
-    }
+    total_uninited_output_wckb += (uint64_t)output_uninit_wckb[i].amount;
+  }
+
+  uint64_t total_deposited_dao = 0;
+  for (int i = 0; i < deposited_dao_cnt; i++) {
+    total_deposited_dao += (uint64_t)deposited_dao[i].amount;
+  }
+  if (total_uninited_output_wckb != total_deposited_dao) {
+    sprintf(dbuf, "uninit amount %ld, deposited_dao amount %ld",
+            (uint64_t)total_uninited_output_wckb,
+            (uint64_t)total_deposited_dao);
+    ckb_debug(dbuf);
+    return ERROR_INCORRECT_UNINIT_OUTPUT_WCKB;
   }
 
   ckb_debug("bye");

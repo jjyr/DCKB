@@ -30,6 +30,14 @@ Defines commonly used high level functions and constants.
 #define ERROR_INCORRECT_UNINIT_OUTPUT_WCKB -44
 #define ERROR_ALIGN -45
 #define ERROR_OUTPUT_ALIGN -46
+#define ERROR_LOAD_SCRIPT -50
+#define ERROR_LOAD_TYPE_ID -51
+#define ERROR_LOAD_WITNESS_ARGS -52
+#define ERROR_LOAD_ALIGN_INDEX -53
+#define ERROR_LOAD_TYPE_HASH -54
+#define ERROR_LOAD_OCCUPIED_CAPACITY -55
+#define ERROR_LOAD_CAPACITY -56
+#define ERROR_LOAD_WCKB_DATA -57
 
 /* since */
 #define SINCE_VALUE_BITS 56

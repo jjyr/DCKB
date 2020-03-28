@@ -14,12 +14,12 @@ const CKB_HASH_PERSONALIZATION: &[u8] = b"ckb-default-hash";
 
 const BINARIES: &[(&str, &str)] = &[
     (
-        "secp256k1_data",
-        "9799bee251b975b82c45a02154ce28cec89c5853ecc14d12b7b8cccfc19e0af4",
+        "always_success",
+        "56806108025878f143d767a5e642f83b3043b185ed891a41eb71a7873b3f7284",
     ),
     (
-        "anyone_can_pay",
-        "fc2e969b547942a9a6c9b608ac9b2992ed4f5cc5381614c7b86ad1c1d9e5ee4f",
+        "wckb",
+        "4914564a570940aa8eb6df732d59f99297097d6b70961fd2860ed145146825c0",
     ),
 ];
 

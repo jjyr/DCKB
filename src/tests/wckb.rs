@@ -391,20 +391,29 @@ fn test_wckb_withdraw() {
 
 #[test]
 fn test_wckb_transfer() {
+    const DAO_OCCUPIED_CAPACITY: u64 = 102_00000000u64;
     let mut data_loader = DummyDataLoader::new();
     let (privkey, lock_args) = gen_lock();
 
-    let (header1, header1_epoch) = gen_header(1554, 10000000, 35, 1000, 1000);
-    let (header2, header2_epoch) = gen_header(2000610, 10001000, 575, 2000000, 1100);
+    let ar1 = 10000000;
+    let ar2 = 10001000;
+    let sender_coin = 100000_00000000;
+    let receiver_coin = 50000_00000000;
+    let sender_withdraw_coin: u64 = ((sender_coin - DAO_OCCUPIED_CAPACITY) as u128 * ar2 as u128
+        / ar1 as u128
+        + DAO_OCCUPIED_CAPACITY as u128) as u64;
+    let transfer_coin: u64 = 10000_00000000;
+    let (header1, header1_epoch) = gen_header(1554, ar1, 35, 1000, 1000);
+    let (header2, header2_epoch) = gen_header(2000610, ar2, 575, 2000000, 1100);
     let (wckb_cell1, wckb_previous_out_point1, wckb_cell_data1) = gen_wckb_cell(
         &mut data_loader,
-        Capacity::bytes(100000).expect("bytes"),
+        Capacity::shannons(sender_coin),
         lock_args.clone(),
         0,
     );
     let (wckb_cell2, wckb_previous_out_point2, wckb_cell_data2) = gen_wckb_cell(
         &mut data_loader,
-        Capacity::bytes(50000).expect("bytes"),
+        Capacity::shannons(receiver_coin),
         lock_args,
         0,
     );
@@ -451,9 +460,15 @@ fn test_wckb_transfer() {
         .input(CellInput::new(wckb_previous_out_point1, 0))
         .input(CellInput::new(wckb_previous_out_point2, 0))
         .output(wckb_cell_output())
-        .output_data(wckb_data(90009_98500000, header2.number()).pack())
+        .output_data(
+            wckb_data(
+                (sender_withdraw_coin - transfer_coin).into(),
+                header2.number(),
+            )
+            .pack(),
+        )
         .output(wckb_cell_output())
-        .output_data(wckb_data(60000_00000000, header2.number()).pack())
+        .output_data(wckb_data((receiver_coin + transfer_coin).into(), header2.number()).pack())
         .header_dep(header1.hash())
         .header_dep(header2.hash())
         .witness(wckb_witness.as_bytes().pack())

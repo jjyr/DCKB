@@ -59,6 +59,7 @@
 #define UDT_LEN 16
 #define MAX_HEADER_SIZE 32768
 #define MAX_SWAPS 256
+#define DAO_OCCUPIED_CAPACITY 10200000000
 
 const uint8_t NERVOS_DAO_DATA_HASH[] = {
     0x32, 0x06, 0x4a, 0x14, 0xce, 0x10, 0xd9, 0x5d, 0x4b, 0x73, 0x43,
@@ -277,6 +278,13 @@ int fetch_inputs(unsigned char *type_hash, int *withdraw_dao_cnt,
       if (ret != CKB_SUCCESS || len != CKB_LEN) {
         return ERROR_LOAD_OCCUPIED_CAPACITY;
       }
+      if (occupied_capacity != DAO_OCCUPIED_CAPACITY) {
+        sprintf(dbuf, "input DAO occupied capacity %ld, expected %ld",
+                occupied_capacity, DAO_OCCUPIED_CAPACITY);
+        ckb_debug(dbuf);
+        i += 1;
+        continue;
+      }
       len = CKB_LEN;
       uint64_t original_capacity;
       ret = ckb_checked_load_cell_by_field((uint8_t *)&original_capacity, &len,
@@ -312,29 +320,6 @@ int fetch_inputs(unsigned char *type_hash, int *withdraw_dao_cnt,
     i++;
   }
   return CKB_SUCCESS;
-}
-
-/* return index of swap_infos, return -1 if not found */
-int find_swap_by_lock_hash(SwapInfo *swap_infos, int swap_infos_cnt,
-                           unsigned char *lock_hash) {
-  for (int j = 0; j < swap_infos_cnt; j++) {
-    int ret = memcmp(swap_infos[j].lock_hash, lock_hash, BLAKE2B_BLOCK_SIZE);
-    if (ret == 0) {
-      return j;
-    }
-  }
-  return -1;
-}
-
-/* return index of token_infos, return -1 if not found */
-int find_token_by_block_number(TokenInfo *token_infos, int token_infos_cnt,
-                               uint64_t block_number) {
-  for (int j = 0; j < token_infos_cnt; j++) {
-    if (token_infos[j].block_number == block_number) {
-      return j;
-    }
-  }
-  return -1;
 }
 
 /* check outputs WCKB
@@ -387,6 +372,21 @@ int fetch_outputs(unsigned char *wckb_type_hash, uint64_t align_block_number,
     if (is_dao) {
       ckb_debug("check a new deposit cell");
       /* check deposited dao cell */
+      uint64_t occupied_capacity;
+      len = CKB_LEN;
+      ret = ckb_checked_load_cell_by_field(&occupied_capacity, &len, 0, i,
+                                           CKB_SOURCE_OUTPUT,
+                                           CKB_CELL_FIELD_OCCUPIED_CAPACITY);
+      if (ret != CKB_SUCCESS || len != CKB_LEN) {
+        return ERROR_SYSCALL;
+      }
+      if (occupied_capacity != DAO_OCCUPIED_CAPACITY) {
+        sprintf(dbuf, "output DAO occupied capacity %ld, expected %ld",
+                occupied_capacity, DAO_OCCUPIED_CAPACITY);
+        ckb_debug(dbuf);
+        i += 1;
+        continue;
+      }
       uint64_t amount;
       unsigned char lock_hash[BLAKE2B_BLOCK_SIZE];
       len = BLAKE2B_BLOCK_SIZE;
@@ -405,21 +405,13 @@ int fetch_outputs(unsigned char *wckb_type_hash, uint64_t align_block_number,
         return ERROR_SYSCALL;
       }
       /* record deposited dao amount */
-      int found =
-          find_swap_by_lock_hash(deposited_dao, *deposited_dao_cnt, lock_hash);
-      if (found >= 0) {
-        /* found it */
-        deposited_dao[found].amount += amount;
-      } else {
-        /* initialize new instance */
-        if (*deposited_dao_cnt >= MAX_SWAPS) {
-          return ERROR_TOO_MANY_SWAPS;
-        }
-        int new_i = *deposited_dao_cnt;
-        *deposited_dao_cnt += 1;
-        deposited_dao[new_i].amount = amount;
-        memcpy(deposited_dao[new_i].lock_hash, lock_hash, BLAKE2B_BLOCK_SIZE);
+      if (*deposited_dao_cnt >= MAX_SWAPS) {
+        return ERROR_TOO_MANY_SWAPS;
       }
+      int new_i = *deposited_dao_cnt;
+      *deposited_dao_cnt += 1;
+      deposited_dao[new_i].amount = amount;
+      memcpy(deposited_dao[new_i].lock_hash, lock_hash, BLAKE2B_BLOCK_SIZE);
     } else if (memcmp(output_type_hash, wckb_type_hash, BLAKE2B_BLOCK_SIZE) ==
                0) {
       /* check wckb cell */
@@ -443,42 +435,28 @@ int fetch_outputs(unsigned char *wckb_type_hash, uint64_t align_block_number,
         if (ret != CKB_SUCCESS || len != BLAKE2B_BLOCK_SIZE) {
           return ERROR_SYSCALL;
         }
-        int found = find_swap_by_lock_hash(uninitialized_wckb,
-                                           *uninitialized_wckb_cnt, lock_hash);
-        if (found >= 0) {
-          /* found it */
-          uninitialized_wckb[found].amount += amount;
-        } else {
-          /* initialize new instance */
-          if (*uninitialized_wckb_cnt >= MAX_SWAPS) {
-            return ERROR_TOO_MANY_SWAPS;
-          }
-          int new_i = *uninitialized_wckb_cnt;
-          *uninitialized_wckb_cnt += 1;
-          uninitialized_wckb[new_i].amount = amount;
-          memcpy(uninitialized_wckb[new_i].lock_hash, lock_hash,
-                 BLAKE2B_BLOCK_SIZE);
+        /* initialize new instance */
+        if (*uninitialized_wckb_cnt >= MAX_SWAPS) {
+          return ERROR_TOO_MANY_SWAPS;
         }
+        int new_i = *uninitialized_wckb_cnt;
+        *uninitialized_wckb_cnt += 1;
+        uninitialized_wckb[new_i].amount = amount;
+        memcpy(uninitialized_wckb[new_i].lock_hash, lock_hash,
+               BLAKE2B_BLOCK_SIZE);
       } else {
         /* wckb is initialized */
         if (block_number != align_block_number) {
           return ERROR_OUTPUT_ALIGN;
         }
-        int found = find_token_by_block_number(
-            initialized_wckb, *initialized_wckb_cnt, block_number);
-        if (found >= 0) {
-          /* found it */
-          initialized_wckb[found].amount += amount;
-        } else {
-          /* initialize new instance */
-          if (*initialized_wckb_cnt >= MAX_SWAPS) {
-            return ERROR_TOO_MANY_SWAPS;
-          }
-          int new_i = *initialized_wckb_cnt;
-          *initialized_wckb_cnt += 1;
-          initialized_wckb[new_i].amount = amount;
-          initialized_wckb[new_i].block_number = block_number;
+        /* initialize new instance */
+        if (*initialized_wckb_cnt >= MAX_SWAPS) {
+          return ERROR_TOO_MANY_SWAPS;
         }
+        int new_i = *initialized_wckb_cnt;
+        *initialized_wckb_cnt += 1;
+        initialized_wckb[new_i].amount = amount;
+        initialized_wckb[new_i].block_number = block_number;
       }
     }
     i++;
@@ -500,16 +478,8 @@ int align_dao(size_t i, size_t source, dao_header_data_t align_target_data,
     ckb_debug(dbuf);
     return ERROR_ALIGN;
   }
-  uint64_t occupied_capacity;
-  uint64_t len = CKB_LEN;
-  int ret =
-      ckb_checked_load_cell_by_field((uint8_t *)&occupied_capacity, &len, 0, i,
-                                     source, CKB_CELL_FIELD_OCCUPIED_CAPACITY);
-  if (ret != CKB_SUCCESS || len != CKB_LEN) {
-    return ERROR_LOAD_OCCUPIED_CAPACITY;
-  }
   dao_header_data_t deposit_data;
-  ret = load_dao_header_data(i, source, &deposit_data);
+  int ret = load_dao_header_data(i, source, &deposit_data);
   if (ret != CKB_SUCCESS) {
     return ret;
   }
@@ -517,7 +487,7 @@ int align_dao(size_t i, size_t source, dao_header_data_t align_target_data,
   if (deposited_block_number == 0) {
     deposited_block_number = deposit_data.block_number;
   }
-  return calculate_dao_input_capacity(occupied_capacity, deposit_data,
+  return calculate_dao_input_capacity(DAO_OCCUPIED_CAPACITY, deposit_data,
                                       align_target_data, deposited_block_number,
                                       original_capacity, calculated_capacity);
 }

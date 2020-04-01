@@ -1,12 +1,12 @@
 [package]
-name = "ckb-system-scripts"
-version = "0.5.1"
-authors = ["Nervos Core Dev <dev@nervos.org>"]
+name = "wckb"
+version = "0.0.1"
+authors = ["Jiang Jinyang <jjyruby@gmail.com>"]
 edition = "2018"
 build = "build.rs"
 license = "MIT"
-description = "CKB System Scripts"
-repository = "https://github.com/nervosnetwork/ckb-system-scripts"
+description = "Wrapped CKB"
+repository = "https://github.com/jjyr/wckb"
 include = ["src/**/*", "Cargo.toml", "build.rs", "specs/cells/*"]
 
 [dependencies]

@@ -328,13 +328,11 @@ int fetch_inputs(unsigned char *type_hash, int *withdraw_dao_cnt,
  */
 int fetch_outputs(unsigned char *wckb_type_hash, uint64_t align_block_number,
                   int *deposited_dao_cnt, SwapInfo deposited_dao[MAX_SWAPS],
-                  int *uninitialized_wckb_cnt,
-                  SwapInfo uninitialized_wckb[MAX_SWAPS],
-                  int *initialized_wckb_cnt,
-                  TokenInfo initialized_wckb[MAX_SWAPS]) {
+                  int *new_wckb_cell_cnt, SwapInfo new_wckb_cell[MAX_SWAPS],
+                  int *wckb_cell_cnt, TokenInfo wckb_cell[MAX_SWAPS]) {
   *deposited_dao_cnt = 0;
-  *uninitialized_wckb_cnt = 0;
-  *initialized_wckb_cnt = 0;
+  *new_wckb_cell_cnt = 0;
+  *wckb_cell_cnt = 0;
   int ret;
   /* iterate all outputs */
   int i = 0;
@@ -436,27 +434,26 @@ int fetch_outputs(unsigned char *wckb_type_hash, uint64_t align_block_number,
           return ERROR_SYSCALL;
         }
         /* initialize new instance */
-        if (*uninitialized_wckb_cnt >= MAX_SWAPS) {
+        if (*new_wckb_cell_cnt >= MAX_SWAPS) {
           return ERROR_TOO_MANY_SWAPS;
         }
-        int new_i = *uninitialized_wckb_cnt;
-        *uninitialized_wckb_cnt += 1;
-        uninitialized_wckb[new_i].amount = amount;
-        memcpy(uninitialized_wckb[new_i].lock_hash, lock_hash,
-               BLAKE2B_BLOCK_SIZE);
+        int new_i = *new_wckb_cell_cnt;
+        *new_wckb_cell_cnt += 1;
+        new_wckb_cell[new_i].amount = amount;
+        memcpy(new_wckb_cell[new_i].lock_hash, lock_hash, BLAKE2B_BLOCK_SIZE);
       } else {
         /* wckb is initialized */
         if (block_number != align_block_number) {
           return ERROR_OUTPUT_ALIGN;
         }
         /* initialize new instance */
-        if (*initialized_wckb_cnt >= MAX_SWAPS) {
+        if (*wckb_cell_cnt >= MAX_SWAPS) {
           return ERROR_TOO_MANY_SWAPS;
         }
-        int new_i = *initialized_wckb_cnt;
-        *initialized_wckb_cnt += 1;
-        initialized_wckb[new_i].amount = amount;
-        initialized_wckb[new_i].block_number = block_number;
+        int new_i = *wckb_cell_cnt;
+        *wckb_cell_cnt += 1;
+        wckb_cell[new_i].amount = amount;
+        wckb_cell[new_i].block_number = block_number;
       }
     }
     i++;
@@ -545,21 +542,21 @@ int main() {
   /* fetch outputs */
   int deposited_dao_cnt = 0;
   SwapInfo deposited_dao[MAX_SWAPS];
-  int output_uninit_wckb_cnt = 0;
-  SwapInfo output_uninit_wckb[MAX_SWAPS];
-  int output_inited_wckb_cnt = 0;
-  TokenInfo output_inited_wckb[MAX_SWAPS];
+  int output_new_wckb_cells_cnt = 0;
+  SwapInfo output_new_wckb_cells[MAX_SWAPS];
+  int output_wckb_cells_cnt = 0;
+  TokenInfo output_wckb_cells[MAX_SWAPS];
   ret = fetch_outputs(type_hash, align_target_data.block_number,
                       &deposited_dao_cnt, deposited_dao,
-                      &output_uninit_wckb_cnt, output_uninit_wckb,
-                      &output_inited_wckb_cnt, output_inited_wckb);
+                      &output_new_wckb_cells_cnt, output_new_wckb_cells,
+                      &output_wckb_cells_cnt, output_wckb_cells);
   sprintf(dbuf, "fetch outputs ret %d", ret);
   ckb_debug(dbuf);
   if (ret != CKB_SUCCESS) {
     return ret;
   }
   sprintf(dbuf, "deposited_dao_cnt %d output_uninit_cnt %d output_init_cnt %d",
-          deposited_dao_cnt, output_uninit_wckb_cnt, output_inited_wckb_cnt);
+          deposited_dao_cnt, output_new_wckb_cells_cnt, output_wckb_cells_cnt);
   ckb_debug(dbuf);
   /* check equations
    * 1. inputs WCKB - withdraw NervosDAO == outputs WCKB
@@ -593,10 +590,10 @@ int main() {
   }
 
   uint64_t total_output_wckb = 0;
-  for (int i = 0; i < output_inited_wckb_cnt; i++) {
+  for (int i = 0; i < output_wckb_cells_cnt; i++) {
     ret = align_dao(i, CKB_SOURCE_OUTPUT, align_target_data,
-                    output_inited_wckb[i].block_number,
-                    output_inited_wckb[i].amount, &calculated_capacity);
+                    output_wckb_cells[i].block_number,
+                    output_wckb_cells[i].amount, &calculated_capacity);
     if (ret != CKB_SUCCESS) {
       return ret;
     }
@@ -614,19 +611,18 @@ int main() {
   }
 
   /* 2. uninited WCKB == deposited NervosDAO */
-  uint64_t total_uninited_output_wckb = 0;
-  for (int i = 0; i < output_uninit_wckb_cnt; i++) {
-    total_uninited_output_wckb += (uint64_t)output_uninit_wckb[i].amount;
+  uint64_t total_output_new_wckb = 0;
+  for (int i = 0; i < output_new_wckb_cells_cnt; i++) {
+    total_output_new_wckb += (uint64_t)output_new_wckb_cells[i].amount;
   }
 
   uint64_t total_deposited_dao = 0;
   for (int i = 0; i < deposited_dao_cnt; i++) {
     total_deposited_dao += (uint64_t)deposited_dao[i].amount;
   }
-  if (total_uninited_output_wckb != total_deposited_dao) {
+  if (total_output_new_wckb != total_deposited_dao) {
     sprintf(dbuf, "uninit amount %ld, deposited_dao amount %ld",
-            (uint64_t)total_uninited_output_wckb,
-            (uint64_t)total_deposited_dao);
+            (uint64_t)total_output_new_wckb, (uint64_t)total_deposited_dao);
     ckb_debug(dbuf);
     return ERROR_INCORRECT_UNINIT_OUTPUT_WCKB;
   }

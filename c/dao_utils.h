@@ -2,6 +2,8 @@
  * https://github.com/nervosnetwork/ckb-system-scripts/blob/master/c/dao.c
  */
 
+#include "defs.h"
+
 #define ERROR_UNKNOWN -1
 #define ERROR_WRONG_NUMBER_OF_ARGUMENTS -2
 #define ERROR_BUFFER_NOT_ENOUGH -10
@@ -15,7 +17,6 @@
 #define ERROR_INVALID_WITHDRAWING_CELL -20
 #define ERROR_SCRIPT_TOO_LONG -21
 
-#define HASH_SIZE 32
 #define HEADER_SIZE 4096
 /* 32 KB */
 #define MAX_WITNESS_SIZE 32768
@@ -39,6 +40,57 @@
 #define EPOCH_LENGTH_OFFSET (EPOCH_NUMBER_BITS + EPOCH_INDEX_BITS)
 #define EPOCH_LENGTH_BITS 16
 #define EPOCH_LENGTH_MASK ((1 << EPOCH_LENGTH_BITS) - 1)
+
+/* Type hash of NervosDAO script,
+ * blake2b(Script(hash_type: Type, code_hash: <type_id>))
+ */
+const uint8_t NERVOS_DAO_TYPE_HASH[] = {
+    226, 137, 104, 157, 176, 16, 226, 115, 88,  4,  92, 188, 116, 239, 156, 196,
+    231, 126, 183, 229, 44,  62, 66,  68,  125, 44, 0,  201, 226, 74,  236, 8,
+};
+
+/* Function to check DAO cells */
+
+int is_dao_type(unsigned char type_hash[HASH_SIZE]) {
+  char dbuf[100];
+  for (int i = 0; i < HASH_SIZE; i++) {
+    sprintf(dbuf, "i=%d num %d", i, type_hash[i]);
+    ckb_debug(dbuf);
+  }
+  int ret = memcmp(NERVOS_DAO_TYPE_HASH, type_hash, HASH_SIZE);
+  sprintf(dbuf, "ret %i", ret);
+  ckb_debug(dbuf);
+  return ret == 0;
+}
+
+int is_dao_deposit_cell(unsigned char type_hash[HASH_SIZE], uint8_t *data,
+                        uint64_t data_len) {
+  /* check data length */
+  if (data_len != BLOCK_NUM_LEN) {
+    return 0;
+  }
+  /* check data */
+  for (int i = 0; i < BLOCK_NUM_LEN; i++) {
+    if (data[i] != 0) {
+      return 0;
+    }
+  }
+  return is_dao_type(type_hash);
+}
+
+int is_dao_withdraw1_cell(unsigned char type_hash[HASH_SIZE], uint8_t *data,
+                          uint64_t data_len) {
+  if (data_len != BLOCK_NUM_LEN) {
+    return 0;
+  }
+  uint64_t block_number = *(uint64_t *)data;
+  if (block_number == 0) {
+    return 0;
+  }
+  return is_dao_type(type_hash);
+}
+
+/* Functions to calculate DAO compensation */
 
 typedef struct {
   uint64_t block_number;

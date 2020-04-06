@@ -4,9 +4,6 @@ common.h
 Defines commonly used high level functions and constants.
 */
 
-#include "ckb_syscalls.h"
-#include "protocol.h"
-
 /* Errors */
 /* secp256k1 unlock errors */
 #define ERROR_ARGUMENTS_LEN -1
@@ -44,58 +41,198 @@ Defines commonly used high level functions and constants.
 #define SINCE_VALUE_MASK 0x00ffffffffffffff
 #define SINCE_EPOCH_FRACTION_FLAG 0b00100000
 
-/* calculate inputs length */
-int calculate_inputs_len() {
-  uint64_t len = 0;
-  /* lower bound, at least tx has one input */
-  int lo = 0;
-  /* higher bound */
-  int hi = 4;
+/* Contract related */
+#define MAX_SWAP_CELLS 256
+#define CKB_LEN 8
+#define UDT_LEN 16
+
+#include "ckb_syscalls.h"
+#include "defs.h"
+#include "protocol.h"
+#include "dao_utils.h"
+
+static char dbuf[100];
+
+typedef struct {
+  uint128_t amount;
+} SwapInfo;
+
+typedef struct {
+  uint64_t block_number;
+  uint128_t amount;
+  uint32_t cell_index;
+} TokenInfo;
+
+/* fetch inputs coins */
+int fetch_inputs(unsigned char *wckb_type_hash, int *withdraw_dao_cnt,
+                 TokenInfo withdraw_dao_infos[MAX_SWAP_CELLS],
+                 int *input_wckb_cnt,
+                 TokenInfo input_wckb_infos[MAX_SWAP_CELLS]) {
+
+  *withdraw_dao_cnt = 0;
+  *input_wckb_cnt = 0;
+  int i = 0;
   int ret;
-  /* try to load input until failing to increase lo and hi */
+  uint64_t len;
   while (1) {
-    ret = ckb_load_input_by_field(NULL, &len, 0, hi, CKB_SOURCE_INPUT,
-                                  CKB_INPUT_FIELD_SINCE);
-    if (ret == CKB_SUCCESS) {
-      lo = hi;
-      hi *= 2;
-    } else {
+    unsigned char input_type_hash[HASH_SIZE];
+    len = HASH_SIZE;
+    ret = ckb_checked_load_cell_by_field(input_type_hash, &len, 0, i,
+                                         CKB_SOURCE_INPUT,
+                                         CKB_CELL_FIELD_TYPE_HASH);
+    if (ret == CKB_INDEX_OUT_OF_BOUND) {
       break;
     }
-  }
-
-  /* now we get our lower bound and higher bound,
-   count number of inputs by binary search */
-  int i;
-  while (lo + 1 != hi) {
-    i = (lo + hi) / 2;
-    ret = ckb_load_input_by_field(NULL, &len, 0, i, CKB_SOURCE_INPUT,
-                                  CKB_INPUT_FIELD_SINCE);
-    if (ret == CKB_SUCCESS) {
-      lo = i;
-    } else {
-      hi = i;
+    if (ret == CKB_ITEM_MISSING) {
+      i++;
+      continue;
     }
+    sprintf(dbuf, "load cell type ret %d len %ld", ret, len);
+    ckb_debug(dbuf);
+    if (ret != CKB_SUCCESS || len != HASH_SIZE) {
+      return ERROR_LOAD_TYPE_HASH;
+    }
+    uint8_t buf[UDT_LEN + BLOCK_NUM_LEN];
+    len = UDT_LEN + BLOCK_NUM_LEN;
+    ret = ckb_load_cell_data(buf, &len, 0, i, CKB_SOURCE_INPUT);
+    if (ret == CKB_ITEM_MISSING) {
+      i++;
+      continue;
+    }
+    sprintf(dbuf, "load input cell data ret %d len %ld", ret, len);
+    ckb_debug(dbuf);
+    if (ret != CKB_SUCCESS || len > UDT_LEN + BLOCK_NUM_LEN) {
+      return ERROR_LOAD_TYPE_HASH;
+    }
+    int is_dao = is_dao_withdraw1_cell(input_type_hash, buf, len);
+    if (is_dao) {
+      ckb_debug("check a new withdraw cell");
+      /* withdraw NervosDAO */
+      uint64_t deposited_block_number = *(uint64_t *)buf;
+      len = CKB_LEN;
+      uint64_t original_capacity;
+      ret = ckb_checked_load_cell_by_field((uint8_t *)&original_capacity, &len,
+                                           0, i, CKB_SOURCE_INPUT,
+                                           CKB_CELL_FIELD_CAPACITY);
+      if (ret != CKB_SUCCESS || len != CKB_LEN) {
+        return ERROR_LOAD_CAPACITY;
+      }
+      /* record withdraw amount */
+      int j = *withdraw_dao_cnt;
+      *withdraw_dao_cnt += 1;
+      withdraw_dao_infos[j].amount = original_capacity;
+      withdraw_dao_infos[j].block_number = deposited_block_number;
+      withdraw_dao_infos[j].cell_index = i;
+    } else if (memcmp(input_type_hash, wckb_type_hash, HASH_SIZE) == 0) {
+      /* WCKB */
+      uint128_t amount;
+      uint64_t block_number;
+      if (len != UDT_LEN + BLOCK_NUM_LEN) {
+        return ERROR_LOAD_WCKB_DATA;
+      }
+      amount = *(uint128_t *)buf;
+      block_number = *(uint64_t *)(buf + UDT_LEN);
+      /* record input amount */
+      int j = *input_wckb_cnt;
+      *input_wckb_cnt += 1;
+      input_wckb_infos[j].amount = amount;
+      input_wckb_infos[j].block_number = block_number;
+      input_wckb_infos[j].cell_index = i;
+    }
+    i++;
   }
-  /* now lo is last input index and hi is length of inputs */
-  return hi;
+  return CKB_SUCCESS;
 }
 
-/* Extract lock from WitnessArgs */
-int extract_witness_lock(uint8_t *witness, uint64_t len,
-                         mol_seg_t *lock_bytes_seg) {
-  mol_seg_t witness_seg;
-  witness_seg.ptr = witness;
-  witness_seg.size = len;
-
-  if (MolReader_WitnessArgs_verify(&witness_seg, false) != MOL_OK) {
-    return ERROR_ENCODING;
+/* fetch outputs coins */
+int fetch_outputs(unsigned char *wckb_type_hash, int *deposited_dao_cnt,
+                  SwapInfo deposited_dao[MAX_SWAP_CELLS],
+                  int *new_wckb_cell_cnt,
+                  SwapInfo new_wckb_cell[MAX_SWAP_CELLS], int *wckb_cell_cnt,
+                  TokenInfo wckb_cell[MAX_SWAP_CELLS]) {
+  *deposited_dao_cnt = 0;
+  *new_wckb_cell_cnt = 0;
+  *wckb_cell_cnt = 0;
+  int ret;
+  /* iterate all outputs */
+  int i = 0;
+  while (1) {
+    unsigned char output_type_hash[HASH_SIZE];
+    uint64_t len = HASH_SIZE;
+    ret = ckb_checked_load_cell_by_field(output_type_hash, &len, 0, i,
+                                         CKB_SOURCE_OUTPUT,
+                                         CKB_CELL_FIELD_TYPE_HASH);
+    sprintf(dbuf, "load output type ret %d", ret);
+    ckb_debug(dbuf);
+    if (ret == CKB_INDEX_OUT_OF_BOUND) {
+      break;
+    }
+    if (ret == CKB_ITEM_MISSING) {
+      i++;
+      continue;
+    }
+    if (ret != CKB_SUCCESS || len != HASH_SIZE) {
+      return ERROR_LOAD_TYPE_HASH;
+    }
+    len = BLOCK_NUM_LEN + UDT_LEN;
+    uint8_t buf[BLOCK_NUM_LEN + UDT_LEN];
+    ret = ckb_load_cell_data(buf, &len, 0, i, CKB_SOURCE_OUTPUT);
+    if (ret == CKB_ITEM_MISSING) {
+      i++;
+      continue;
+    }
+    if (ret != CKB_SUCCESS || len > (UDT_LEN + BLOCK_NUM_LEN)) {
+      return ERROR_LOAD_WCKB_DATA;
+    }
+    int is_dao = is_dao_deposit_cell(output_type_hash, buf, len);
+    sprintf(dbuf, "check output is dao %d", is_dao);
+    ckb_debug(dbuf);
+    if (is_dao) {
+      ckb_debug("check a new deposit cell");
+      /* check deposited dao cell */
+      uint64_t amount;
+      len = CKB_LEN;
+      ret = ckb_checked_load_cell_by_field(
+          &amount, &len, 0, i, CKB_SOURCE_OUTPUT, CKB_CELL_FIELD_CAPACITY);
+      if (ret != CKB_SUCCESS || len != CKB_LEN) {
+        return ERROR_SYSCALL;
+      }
+      /* record deposited dao amount */
+      if (*deposited_dao_cnt >= MAX_SWAP_CELLS) {
+        return ERROR_TOO_MANY_SWAPS;
+      }
+      int new_i = *deposited_dao_cnt;
+      *deposited_dao_cnt += 1;
+      deposited_dao[new_i].amount = amount;
+    } else if (memcmp(output_type_hash, wckb_type_hash, HASH_SIZE) == 0) {
+      /* check wckb cell */
+      uint128_t amount;
+      uint64_t block_number;
+      if (len != (UDT_LEN + BLOCK_NUM_LEN)) {
+        return ERROR_LOAD_WCKB_DATA;
+      }
+      amount = *(uint128_t *)buf;
+      block_number = *(uint64_t *)(buf + UDT_LEN);
+      if (block_number == 0) {
+        /* new wckb */
+        if (*new_wckb_cell_cnt >= MAX_SWAP_CELLS) {
+          return ERROR_TOO_MANY_SWAPS;
+        }
+        int new_i = *new_wckb_cell_cnt;
+        *new_wckb_cell_cnt += 1;
+        new_wckb_cell[new_i].amount = amount;
+      } else {
+        /* wckb */
+        if (*wckb_cell_cnt >= MAX_SWAP_CELLS) {
+          return ERROR_TOO_MANY_SWAPS;
+        }
+        int new_i = *wckb_cell_cnt;
+        *wckb_cell_cnt += 1;
+        wckb_cell[new_i].amount = amount;
+        wckb_cell[new_i].block_number = block_number;
+      }
+    }
+    i++;
   }
-  mol_seg_t lock_seg = MolReader_WitnessArgs_get_lock(&witness_seg);
-
-  if (MolReader_BytesOpt_is_none(&lock_seg)) {
-    return ERROR_ENCODING;
-  }
-  *lock_bytes_seg = MolReader_Bytes_raw_bytes(&lock_seg);
   return CKB_SUCCESS;
 }

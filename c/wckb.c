@@ -46,12 +46,10 @@
 #include "blake2b.h"
 #include "ckb_syscalls.h"
 #include "common.h"
-#include "defs.h"
 #include "protocol.h"
 
 #define SCRIPT_SIZE 32768
 #define MAX_HEADER_SIZE 32768
-#define DAO_OCCUPIED_CAPACITY 10200000000
 
 int load_align_target_header(uint64_t *index) {
   int ret;
@@ -88,34 +86,6 @@ int load_align_target_header(uint64_t *index) {
 
   *index = *(uint64_t *)type_bytes_seg.ptr;
   return CKB_SUCCESS;
-}
-
-int align_dao(size_t i, size_t source, dao_header_data_t align_target_data,
-              uint64_t deposited_block_number, uint64_t original_capacity,
-              uint64_t *calculated_capacity) {
-  if (align_target_data.block_number == deposited_block_number) {
-    *calculated_capacity = original_capacity;
-    return CKB_SUCCESS;
-  }
-
-  if (align_target_data.block_number < deposited_block_number) {
-    sprintf(dbuf, "align %ld deposit block %ld", align_target_data.block_number,
-            deposited_block_number);
-    ckb_debug(dbuf);
-    return ERROR_ALIGN;
-  }
-  dao_header_data_t deposit_data;
-  int ret = load_dao_header_data(i, source, &deposit_data);
-  if (ret != CKB_SUCCESS) {
-    return ret;
-  }
-  /* uninitialized wckb */
-  if (deposited_block_number == 0) {
-    deposited_block_number = deposit_data.block_number;
-  }
-  return calculate_dao_input_capacity(DAO_OCCUPIED_CAPACITY, deposit_data,
-                                      align_target_data, deposited_block_number,
-                                      original_capacity, calculated_capacity);
 }
 
 int main() {
@@ -187,7 +157,7 @@ int main() {
   uint64_t calculated_capacity;
   uint64_t total_input_wckb = 0;
   for (int i = 0; i < input_wckb_cnt; i++) {
-    ret = align_dao(i, CKB_SOURCE_INPUT, align_target_data,
+    ret = align_dao_compensation(i, CKB_SOURCE_INPUT, align_target_data,
                     input_wckb_infos[i].block_number,
                     input_wckb_infos[i].amount, &calculated_capacity);
     if (ret != CKB_SUCCESS) {

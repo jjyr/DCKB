@@ -4,6 +4,9 @@ common.h
 Defines commonly used high level functions and constants.
 */
 
+/* uint128 type */
+typedef unsigned __int128 uint128_t;
+
 /* Errors */
 /* secp256k1 unlock errors */
 #define ERROR_ARGUMENTS_LEN -1
@@ -45,9 +48,11 @@ Defines commonly used high level functions and constants.
 #define MAX_SWAP_CELLS 256
 #define CKB_LEN 8
 #define UDT_LEN 16
+#define HASH_SIZE 32
+#define BLOCK_NUM_LEN 8
+#define DAO_OCCUPIED_CAPACITY 10200000000
 
 #include "ckb_syscalls.h"
-#include "defs.h"
 #include "protocol.h"
 #include "dao_utils.h"
 
@@ -235,4 +240,34 @@ int fetch_outputs(unsigned char *wckb_type_hash, int *deposited_dao_cnt,
     i++;
   }
   return CKB_SUCCESS;
+}
+
+int align_dao_compensation(size_t i, size_t source,
+                           dao_header_data_t align_target_data,
+                           uint64_t deposited_block_number,
+                           uint64_t original_capacity,
+                           uint64_t *calculated_capacity) {
+  if (align_target_data.block_number == deposited_block_number) {
+    *calculated_capacity = original_capacity;
+    return CKB_SUCCESS;
+  }
+
+  if (align_target_data.block_number < deposited_block_number) {
+    sprintf(dbuf, "align %ld deposit block %ld", align_target_data.block_number,
+            deposited_block_number);
+    ckb_debug(dbuf);
+    return ERROR_ALIGN;
+  }
+  dao_header_data_t deposit_data;
+  int ret = load_dao_header_data(i, source, &deposit_data);
+  if (ret != CKB_SUCCESS) {
+    return ret;
+  }
+  /* uninitialized wckb */
+  if (deposited_block_number == 0) {
+    deposited_block_number = deposit_data.block_number;
+  }
+  return calculate_dao_input_capacity(DAO_OCCUPIED_CAPACITY, deposit_data,
+                                      align_target_data, deposited_block_number,
+                                      original_capacity, calculated_capacity);
 }

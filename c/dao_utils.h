@@ -2,8 +2,6 @@
  * https://github.com/nervosnetwork/ckb-system-scripts/blob/master/c/dao.c
  */
 
-#include "defs.h"
-
 #define ERROR_UNKNOWN -1
 #define ERROR_WRONG_NUMBER_OF_ARGUMENTS -2
 #define ERROR_BUFFER_NOT_ENOUGH -10

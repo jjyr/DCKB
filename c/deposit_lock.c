@@ -109,9 +109,115 @@ int load_proxy_lock_cell_index(uint8_t *index) {
   return CKB_SUCCESS;
 }
 
+/* check group inputs
+ * calculate the withdraw phase and expected wckb destroy amount
+ */
+int check_unlock_cells(int *is_phase1, uint64_t *expected_destroy_amount) {
+  int ret;
+  uint64_t len;
+  int i = 0;
+  /*
+   * We assume inputs cells are NervosDAO cells,
+   * input cells withdraw phase must be same.
+   */
+  uint8_t cell_data[BLOCK_NUM_LEN];
+  uint8_t nervos_dao_type_hash[HASH_SIZE];
+  uint8_t type_hash[HASH_SIZE];
+  *expected_destroy_amount = 0;
+  while (1) {
+    len = BLOCK_NUM_LEN;
+    ret = ckb_load_cell_data(cell_data, &len, 0, i, CKB_SOURCE_GROUP_INPUT);
+    if (ret == CKB_INDEX_OUT_OF_BOUND) {
+      break;
+    }
+    if (ret != CKB_SUCCESS || len != BLOCK_NUM_LEN) {
+      return ERROR_ENCODING;
+    }
+    /* check withdraw phase */
+    if (is_phase1 == NULL) {
+      /* first cell, initialize is_phase1 */
+      *is_phase1 = is_dao_withdraw1_cell(cell_data, len);
+    }
+    int cell_is_phase1 = is_dao_withdraw1_cell(cell_data, len);
+    /* inputs must be same withdraw phase */
+    if (*is_phase1 != cell_is_phase1) {
+      return ERROR_ENCODING;
+    }
+    /* check type hash */
+    uint64_t original_capacity;
+    len = HASH_SIZE;
+    ret = ckb_checked_load_cell_by_field(type_hash, &len, 0, i,
+                                         CKB_SOURCE_GROUP_INPUT,
+                                         CKB_CELL_FIELD_TYPE_HASH);
+    if (ret != CKB_SUCCESS || len != BLOCK_NUM_LEN) {
+      return ERROR_ENCODING;
+    }
+    if (i == 0) {
+      /* first cell, initialize nervos_dao_type_hash */
+      memcpy(nervos_dao_type_hash, type_hash, HASH_SIZE);
+    } else {
+      /* inputs must have same type hash */
+      ret = memcmp(nervos_dao_type_hash, type_hash, HASH_SIZE);
+      if (ret != 0) {
+        return ERROR_ENCODING;
+      }
+    }
+    /* calculate expected amount */
+    uint64_t original_capacity;
+    len = CKB_LEN;
+    ret = ckb_checked_load_cell_by_field((uint8_t *)&original_capacity, &len, 0,
+                                         i, CKB_SOURCE_GROUP_INPUT,
+                                         CKB_CELL_FIELD_CAPACITY);
+    if (ret != CKB_SUCCESS || len != CKB_LEN) {
+      return ERROR_LOAD_CAPACITY;
+    }
+    if (cell_is_phase1) {
+      *expected_destroy_amount += original_capacity;
+    } else {
+      /* load DAO deposit header */
+      size_t header_index;
+      ret = extract_deposit_header_index(i, &header_index);
+      if (ret != CKB_SUCCESS) {
+        return ret;
+      }
+      dao_header_data_t deposit_data;
+      ret = load_dao_header_data(header_index, CKB_SOURCE_DEP_HEADER,
+                                 &deposit_data);
+      if (ret != CKB_SUCCESS) {
+        return ret;
+      }
+      /* load DAO withdraw header */
+      dao_header_data_t target_data;
+      ret = load_dao_header_data(i, CKB_SOURCE_GROUP_INPUT, &target_data);
+      if (ret != CKB_SUCCESS) {
+        return ret;
+      }
+      /* calculate withdraw amount */
+      uint64_t deposited_block_number = *(uint64_t *)cell_data;
+      uint64_t calculated_capacity;
+      ret = calculate_dao_input_capacity(
+          DAO_OCCUPIED_CAPACITY, deposit_data, target_data,
+          deposited_block_number, original_capacity, &calculated_capacity);
+      if (ret != CKB_SUCCESS) {
+        return ret;
+      }
+      /* accumulate compensation */
+      uint64_t compensation_capacity = 0;
+      if (__builtin_usubl_overflow(calculated_capacity, original_capacity,
+                                   &compensation_capacity)) {
+        return ERROR_OVERFLOW;
+      }
+      *expected_destroy_amount += compensation_capacity;
+    }
+    i++;
+  }
+  return CKB_SUCCESS;
+}
+
 int main() {
   uint8_t proxy_lock_cell_i = 0;
   uint8_t wckb_type_hash[HASH_SIZE];
+  /* TODO unlock via timeout */
   int ret = load_proxy_lock_cell_index(&proxy_lock_cell_i);
   if (ret != CKB_SUCCESS) {
     return ret;
@@ -120,5 +226,13 @@ int main() {
   if (ret != CKB_SUCCESS) {
     return ret;
   }
+
+  int is_phase1;
+  uint64_t expected_destroy_amount;
+  ret = check_unlock_cells(&is_phase1, &expected_destroy_amount);
+  if (ret != CKB_SUCCESS) {
+    return ret;
+  }
+
   return CKB_SUCCESS;
 }

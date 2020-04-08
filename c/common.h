@@ -56,8 +56,6 @@ typedef unsigned __int128 uint128_t;
 #include "protocol.h"
 #include "dao_utils.h"
 
-static char dbuf[100];
-
 typedef struct {
   uint128_t amount;
 } SwapInfo;
@@ -92,8 +90,7 @@ int fetch_inputs(unsigned char *wckb_type_hash, int *withdraw_dao_cnt,
       i++;
       continue;
     }
-    sprintf(dbuf, "load cell type ret %d len %ld", ret, len);
-    ckb_debug(dbuf);
+    printf("load cell type ret %d len %ld", ret, len);
     if (ret != CKB_SUCCESS || len != HASH_SIZE) {
       return ERROR_LOAD_TYPE_HASH;
     }
@@ -104,14 +101,13 @@ int fetch_inputs(unsigned char *wckb_type_hash, int *withdraw_dao_cnt,
       i++;
       continue;
     }
-    sprintf(dbuf, "load input cell data ret %d len %ld", ret, len);
-    ckb_debug(dbuf);
+    printf("load input cell data ret %d len %ld", ret, len);
     if (ret != CKB_SUCCESS || len > UDT_LEN + BLOCK_NUM_LEN) {
       return ERROR_LOAD_TYPE_HASH;
     }
     int is_dao = is_dao_withdraw1_cell(input_type_hash, buf, len);
     if (is_dao) {
-      ckb_debug("check a new withdraw cell");
+      printf("check a new withdraw cell");
       /* withdraw NervosDAO */
       uint64_t deposited_block_number = *(uint64_t *)buf;
       len = CKB_LEN;
@@ -167,8 +163,7 @@ int fetch_outputs(unsigned char *wckb_type_hash, int *deposited_dao_cnt,
     ret = ckb_checked_load_cell_by_field(output_type_hash, &len, 0, i,
                                          CKB_SOURCE_OUTPUT,
                                          CKB_CELL_FIELD_TYPE_HASH);
-    sprintf(dbuf, "load output type ret %d", ret);
-    ckb_debug(dbuf);
+    printf("load output type ret %d", ret);
     if (ret == CKB_INDEX_OUT_OF_BOUND) {
       break;
     }
@@ -190,10 +185,9 @@ int fetch_outputs(unsigned char *wckb_type_hash, int *deposited_dao_cnt,
       return ERROR_LOAD_WCKB_DATA;
     }
     int is_dao = is_dao_deposit_cell(output_type_hash, buf, len);
-    sprintf(dbuf, "check output is dao %d", is_dao);
-    ckb_debug(dbuf);
+    printf("check output is dao %d", is_dao);
     if (is_dao) {
-      ckb_debug("check a new deposit cell");
+      printf("check a new deposit cell");
       /* check deposited dao cell */
       uint64_t amount;
       len = CKB_LEN;
@@ -253,9 +247,8 @@ int align_dao_compensation(size_t i, size_t source,
   }
 
   if (align_target_data.block_number < deposited_block_number) {
-    sprintf(dbuf, "align %ld deposit block %ld", align_target_data.block_number,
+    printf("align %ld deposit block %ld", align_target_data.block_number,
             deposited_block_number);
-    ckb_debug(dbuf);
     return ERROR_ALIGN;
   }
   dao_header_data_t deposit_data;
@@ -263,7 +256,7 @@ int align_dao_compensation(size_t i, size_t source,
   if (ret != CKB_SUCCESS) {
     return ret;
   }
-  /* uninitialized wckb */
+  /* new wckb */
   if (deposited_block_number == 0) {
     deposited_block_number = deposit_data.block_number;
   }

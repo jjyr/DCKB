@@ -43,6 +43,7 @@
  *
  */
 
+#include "stdio.h"
 #include "blake2b.h"
 #include "ckb_syscalls.h"
 #include "common.h"
@@ -89,22 +90,20 @@ int load_align_target_header(uint64_t *index) {
 }
 
 int main() {
-  ckb_debug("hello");
+  printf("hello");
   int ret;
   unsigned char type_hash[HASH_SIZE];
   uint64_t len = HASH_SIZE;
   /* load self type hash */
   ret = ckb_load_script_hash(type_hash, &len, 0);
-  sprintf(dbuf, "load self script ret %d", ret);
-  ckb_debug(dbuf);
+  printf("load self script ret %d", ret);
   if (ret != CKB_SUCCESS || len != HASH_SIZE) {
     return ERROR_SYSCALL;
   }
   /* load aligned target header */
   uint64_t align_header_index = 0;
   ret = load_align_target_header(&align_header_index);
-  sprintf(dbuf, "load aligned target ret %d", ret);
-  ckb_debug(dbuf);
+  printf("load aligned target ret %d", ret);
   if (ret != CKB_SUCCESS && ret != CKB_INDEX_OUT_OF_BOUND) {
     return ret;
   }
@@ -113,8 +112,7 @@ int main() {
   if (has_align_header) {
     ret = load_dao_header_data(align_header_index, CKB_SOURCE_HEADER_DEP,
                                &align_target_data);
-    sprintf(dbuf, "load aligned header ret %d", ret);
-    ckb_debug(dbuf);
+    printf("load aligned header ret %d", ret);
     if (ret != CKB_SUCCESS && ret != CKB_INDEX_OUT_OF_BOUND) {
       return ERROR_LOAD_HEADER;
     }
@@ -127,8 +125,7 @@ int main() {
   int input_wckb_cnt;
   ret = fetch_inputs(type_hash, &withdraw_dao_cnt, withdraw_dao_infos,
                      &input_wckb_cnt, input_wckb_infos);
-  sprintf(dbuf, "fetch inputs ret %d", ret);
-  ckb_debug(dbuf);
+  printf("fetch inputs ret %d", ret);
   if (ret != CKB_SUCCESS) {
     return ret;
   }
@@ -142,14 +139,12 @@ int main() {
   ret = fetch_outputs(type_hash, &deposited_dao_cnt, deposited_dao,
                       &output_new_wckb_cells_cnt, output_new_wckb_cells,
                       &output_wckb_cells_cnt, output_wckb_cells);
-  sprintf(dbuf, "fetch outputs ret %d", ret);
-  ckb_debug(dbuf);
+  printf("fetch outputs ret %d", ret);
   if (ret != CKB_SUCCESS) {
     return ret;
   }
-  sprintf(dbuf, "deposited_dao_cnt %d output_uninit_cnt %d output_init_cnt %d",
+  printf("deposited_dao_cnt %d output_uninit_cnt %d output_init_cnt %d",
           deposited_dao_cnt, output_new_wckb_cells_cnt, output_wckb_cells_cnt);
-  ckb_debug(dbuf);
   /* check equations
    * 1. inputs WCKB >= outputs WCKB
    * 2. new WCKB == deposited NervosDAO
@@ -176,11 +171,10 @@ int main() {
 
   /* 1. inputs WCKB >= outputs WCKB */
   if (total_input_wckb < total_output_wckb) {
-    sprintf(dbuf,
+    printf(
             "equation 1 total_input_wckb %ld "
             "total_output_wckb %ld",
             total_input_wckb, total_output_wckb);
-    ckb_debug(dbuf);
     return ERROR_INCORRECT_OUTPUT_WCKB;
   }
 
@@ -195,12 +189,11 @@ int main() {
     total_deposited_dao += (uint64_t)deposited_dao[i].amount;
   }
   if (total_output_new_wckb != total_deposited_dao) {
-    sprintf(dbuf, "uninit amount %ld, deposited_dao amount %ld",
+    printf("new wckb amount %ld, deposited_dao amount %ld",
             (uint64_t)total_output_new_wckb, (uint64_t)total_deposited_dao);
-    ckb_debug(dbuf);
     return ERROR_INCORRECT_UNINIT_OUTPUT_WCKB;
   }
 
-  ckb_debug("bye");
+  printf("done");
   return CKB_SUCCESS;
 }

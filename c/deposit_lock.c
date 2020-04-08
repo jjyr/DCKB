@@ -53,8 +53,7 @@ int fetch_inputs(unsigned char *wckb_type_hash,
       i++;
       continue;
     }
-    sprintf(dbuf, "load cell type ret %d len %ld", ret, len);
-    ckb_debug(dbuf);
+    printf("load cell type ret %d len %ld", ret, len);
     if (ret != CKB_SUCCESS || len != HASH_SIZE) {
       return ERROR_LOAD_TYPE_HASH;
     }
@@ -65,14 +64,13 @@ int fetch_inputs(unsigned char *wckb_type_hash,
       i++;
       continue;
     }
-    sprintf(dbuf, "load input cell data ret %d len %ld", ret, len);
-    ckb_debug(dbuf);
+    printf("load input cell data ret %d len %ld", ret, len);
     if (ret != CKB_SUCCESS || len > UDT_LEN + BLOCK_NUM_LEN) {
       return ERROR_LOAD_TYPE_HASH;
     }
     int is_dao = is_dao_withdraw1_cell(input_type_hash, buf, len);
     if (is_dao) {
-      ckb_debug("check a new withdraw cell");
+      printf("check a new withdraw cell");
       /* withdraw NervosDAO */
       uint64_t deposited_block_number = *(uint64_t *)buf;
       size_t deposit_index;
@@ -94,9 +92,8 @@ int fetch_inputs(unsigned char *wckb_type_hash,
         return ERROR_LOAD_OCCUPIED_CAPACITY;
       }
       if (occupied_capacity != DAO_OCCUPIED_CAPACITY) {
-        sprintf(dbuf, "input DAO occupied capacity %ld, expected %ld",
+        printf("input DAO occupied capacity %ld, expected %ld",
                 occupied_capacity, DAO_OCCUPIED_CAPACITY);
-        ckb_debug(dbuf);
         i += 1;
         continue;
       }

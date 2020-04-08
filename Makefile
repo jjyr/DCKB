@@ -2,9 +2,8 @@ TARGET := riscv64-unknown-elf
 CC := $(TARGET)-gcc
 LD := $(TARGET)-gcc
 OBJCOPY := $(TARGET)-objcopy
-CFLAGS := -nostartfiles -O3 -Ideps/molecule -I deps/secp256k1/src -I deps/secp256k1 -I deps/ckb-c-std-lib -I deps/ckb-c-std-lib/libc -I c -I build -Wall -Werror -Wno-nonnull-compare -Wno-unused-function -g
+CFLAGS := -nostartfiles -O3 -Ideps/molecule -I deps/ckb-c-std-lib -I deps/ckb-c-std-lib/libc -I c -I build -Wall -Werror -Wno-nonnull-compare -Wno-unused-function -g
 LDFLAGS := -Wl,-static -fdata-sections -ffunction-sections -Wl,--gc-sections
-SECP256K1_SRC := deps/secp256k1/src/ecmult_static_pre_context.h
 MOLC := moleculec
 MOLC_VERSION := 0.4.1
 PROTOCOL_HEADER := c/protocol.h
@@ -30,19 +29,6 @@ specs/cells/wckb: c/wckb.c ${PROTOCOL_HEADER} c/common.h c/dao_utils.h
 	$(OBJCOPY) --only-keep-debug $@ $(subst specs/cells,build,$@.debug)
 	$(OBJCOPY) --strip-debug --strip-all $@
 
-build/secp256k1_data_info.h: build/dump_secp256k1_data
-	$<
-
-build/dump_secp256k1_data: c/dump_secp256k1_data.c $(SECP256K1_SRC)
-	mkdir -p build
-	gcc $(CFLAGS) -o $@ $<
-
-$(SECP256K1_SRC):
-	cd deps/secp256k1 && \
-		./autogen.sh && \
-		CC=$(CC) LD=$(LD) ./configure --with-bignum=no --enable-ecmult-static-precomputation --enable-endomorphism --enable-module-recovery --host=$(TARGET) && \
-		make src/ecmult_static_pre_context.h src/ecmult_static_context.h
-
 generate-protocol: check-moleculec-version ${PROTOCOL_HEADER}
 
 check-moleculec-version:
@@ -60,30 +46,11 @@ install-tools:
 		cargo install --force --version "${MOLC_VERSION}" "${MOLC}"; \
 	fi
 
-publish:
-	git diff --exit-code Cargo.toml
-	sed -i.bak 's/.*git =/# &/' Cargo.toml
-	cargo publish --allow-dirty
-	git checkout Cargo.toml Cargo.lock
-	rm -f Cargo.toml.bak
-
-package:
-	git diff --exit-code Cargo.toml
-	sed -i.bak 's/.*git =/# &/' Cargo.toml
-	cargo package --allow-dirty
-	git checkout Cargo.toml Cargo.lock
-	rm -f Cargo.toml.bak
-
-package-clean:
-	git checkout Cargo.toml Cargo.lock
-	rm -rf Cargo.toml.bak target/package/
-
 clean:
-	rm -rf specs/cells/anyone_can_pay
-	rm -rf build/secp256k1_data_info.h build/dump_secp256k1_data
-	rm -rf specs/cells/secp256k1_data
+	rm -rf specs/cells/always_success
+	rm -rf specs/cells/wckb
+	rm -rf specs/cells/deposit_lock
 	rm -rf build/*.debug
-	cd deps/secp256k1 && [ -f "Makefile" ] && make clean
 	cargo clean
 
 dist: clean all
@@ -92,4 +59,4 @@ fmt:
 	clang-format -i -style=Google $(wildcard *.h */*.h *.c */*.c)
 	git diff --exit-code
 
-.PHONY: all all-via-docker dist clean package-clean package publish fmt
+.PHONY: all all-via-docker dist clean fmt

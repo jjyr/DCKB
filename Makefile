@@ -88,4 +88,8 @@ clean:
 
 dist: clean all
 
-.PHONY: all all-via-docker dist clean package-clean package publish
+fmt:
+	clang-format -i -style=Google $(wildcard *.h */*.h *.c */*.c)
+	git diff --exit-code
+
+.PHONY: all all-via-docker dist clean package-clean package publish fmt

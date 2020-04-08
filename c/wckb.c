@@ -43,11 +43,11 @@
  *
  */
 
-#include "stdio.h"
 #include "blake2b.h"
 #include "ckb_syscalls.h"
 #include "common.h"
 #include "protocol.h"
+#include "stdio.h"
 
 #define SCRIPT_SIZE 32768
 #define MAX_HEADER_SIZE 32768
@@ -55,7 +55,7 @@
 int load_align_target_header(uint64_t *index) {
   int ret;
   uint64_t len = 0;
-  unsigned char witness[MAX_WITNESS_SIZE];
+  uint8_t witness[MAX_WITNESS_SIZE];
 
   len = MAX_WITNESS_SIZE;
   ret = ckb_load_witness(witness, &len, 0, 0, CKB_SOURCE_GROUP_INPUT);
@@ -92,7 +92,7 @@ int load_align_target_header(uint64_t *index) {
 int main() {
   printf("hello");
   int ret;
-  unsigned char type_hash[HASH_SIZE];
+  uint8_t type_hash[HASH_SIZE];
   uint64_t len = HASH_SIZE;
   /* load self type hash */
   ret = ckb_load_script_hash(type_hash, &len, 0);
@@ -119,12 +119,10 @@ int main() {
   }
 
   /* fetch inputs */
-  TokenInfo withdraw_dao_infos[MAX_SWAP_CELLS];
-  int withdraw_dao_cnt;
   TokenInfo input_wckb_infos[MAX_SWAP_CELLS];
   int input_wckb_cnt;
-  ret = fetch_inputs(type_hash, &withdraw_dao_cnt, withdraw_dao_infos,
-                     &input_wckb_cnt, input_wckb_infos);
+  ret = fetch_inputs(type_hash, NULL, NULL, NULL, NULL, &input_wckb_cnt,
+                     input_wckb_infos);
   printf("fetch inputs ret %d", ret);
   if (ret != CKB_SUCCESS) {
     return ret;
@@ -144,7 +142,7 @@ int main() {
     return ret;
   }
   printf("deposited_dao_cnt %d output_uninit_cnt %d output_init_cnt %d",
-          deposited_dao_cnt, output_new_wckb_cells_cnt, output_wckb_cells_cnt);
+         deposited_dao_cnt, output_new_wckb_cells_cnt, output_wckb_cells_cnt);
   /* check equations
    * 1. inputs WCKB >= outputs WCKB
    * 2. new WCKB == deposited NervosDAO
@@ -153,8 +151,9 @@ int main() {
   uint64_t total_input_wckb = 0;
   for (int i = 0; i < input_wckb_cnt; i++) {
     ret = align_dao_compensation(i, CKB_SOURCE_INPUT, align_target_data,
-                    input_wckb_infos[i].block_number,
-                    input_wckb_infos[i].amount, &calculated_capacity);
+                                 input_wckb_infos[i].block_number,
+                                 input_wckb_infos[i].amount,
+                                 &calculated_capacity);
     if (ret != CKB_SUCCESS) {
       return ret;
     }
@@ -172,9 +171,9 @@ int main() {
   /* 1. inputs WCKB >= outputs WCKB */
   if (total_input_wckb < total_output_wckb) {
     printf(
-            "equation 1 total_input_wckb %ld "
-            "total_output_wckb %ld",
-            total_input_wckb, total_output_wckb);
+        "equation 1 total_input_wckb %ld "
+        "total_output_wckb %ld",
+        total_input_wckb, total_output_wckb);
     return ERROR_INCORRECT_OUTPUT_WCKB;
   }
 
@@ -190,7 +189,7 @@ int main() {
   }
   if (total_output_new_wckb != total_deposited_dao) {
     printf("new wckb amount %ld, deposited_dao amount %ld",
-            (uint64_t)total_output_new_wckb, (uint64_t)total_deposited_dao);
+           (uint64_t)total_output_new_wckb, (uint64_t)total_deposited_dao);
     return ERROR_INCORRECT_UNINIT_OUTPUT_WCKB;
   }
 

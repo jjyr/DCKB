@@ -2,6 +2,8 @@
  * https://github.com/nervosnetwork/ckb-system-scripts/blob/master/c/dao.c
  */
 
+#include "protocol.h"
+
 #define ERROR_UNKNOWN -1
 #define ERROR_WRONG_NUMBER_OF_ARGUMENTS -2
 #define ERROR_BUFFER_NOT_ENOUGH -10
@@ -55,8 +57,7 @@ int is_dao_type(unsigned char type_hash[HASH_SIZE]) {
   return ret == 0;
 }
 
-int is_dao_deposit_cell(unsigned char type_hash[HASH_SIZE], uint8_t *data,
-                        uint64_t data_len) {
+int is_dao_deposit_cell(uint8_t *data, uint64_t data_len) {
   /* check data length */
   if (data_len != BLOCK_NUM_LEN) {
     return 0;
@@ -67,11 +68,10 @@ int is_dao_deposit_cell(unsigned char type_hash[HASH_SIZE], uint8_t *data,
       return 0;
     }
   }
-  return is_dao_type(type_hash);
+  return 1;
 }
 
-int is_dao_withdraw1_cell(unsigned char type_hash[HASH_SIZE], uint8_t *data,
-                          uint64_t data_len) {
+int is_dao_withdraw1_cell(uint8_t *data, uint64_t data_len) {
   if (data_len != BLOCK_NUM_LEN) {
     return 0;
   }
@@ -79,7 +79,7 @@ int is_dao_withdraw1_cell(unsigned char type_hash[HASH_SIZE], uint8_t *data,
   if (block_number == 0) {
     return 0;
   }
-  return is_dao_type(type_hash);
+  return 1;
 }
 
 /* Functions to calculate DAO compensation */
@@ -204,8 +204,8 @@ int calculate_dao_input_capacity(uint64_t occupied_capacity,
   uint64_t counted_capacity = 0;
   if (__builtin_usubl_overflow(original_capacity, occupied_capacity,
                                &counted_capacity)) {
-    printf("original_capacity %ld occupied_capacity %ld",
-            original_capacity, occupied_capacity);
+    printf("original_capacity %ld occupied_capacity %ld", original_capacity,
+           occupied_capacity);
     return ERROR_OVERFLOW;
   }
 
@@ -217,8 +217,8 @@ int calculate_dao_input_capacity(uint64_t occupied_capacity,
   if (__builtin_uaddl_overflow(occupied_capacity,
                                (uint64_t)withdraw_counted_capacity,
                                &withdraw_capacity)) {
-    printf("original_capacity %ld occupied_capacity %ld",
-            original_capacity, (uint64_t)withdraw_counted_capacity);
+    printf("original_capacity %ld occupied_capacity %ld", original_capacity,
+           (uint64_t)withdraw_counted_capacity);
     return ERROR_OVERFLOW;
   }
 

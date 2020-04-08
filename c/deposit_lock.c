@@ -1,137 +1,124 @@
 /* Deposit lock
- * 
+ *
  * This lock is designed to only works with NervosDAO cells,
  * other usage will causes the cell be locked forever.
  *
  * Motivation:
- * This lock is designed to enforce users to destroy WCKB to get their native CKB back,
- * in withdraw phase1 a user must destroy X WCKB, which correspond to the original deposited CKB.
- * in withdraw phase2 a user must destroy Y WCKB which correspond to the NervosDAO compensation.
- * we also set a timeout after the withdraw phase1, after W blocks, if the user do not perform phase2, 
+ * This lock is designed to enforce users to destroy WCKB to get their native
+ * CKB back, in withdraw phase1 a user must destroy X WCKB, which correspond to
+ * the original deposited CKB. in withdraw phase2 a user must destroy Y WCKB
+ * which correspond to the NervosDAO compensation. we also set a timeout after
+ * the withdraw phase1, after W blocks, if the user do not perform phase2,
  * anyone can destroy Y WCKB to get unlock the NervosDAO cell.
  *
  * Unlock conditions:
  *
  * phase1:
  * 1. check `inputs WCKB - outputs WCKB = X`.
- * 2. has exactly one output cell that do not has the type field.
+ * 2. has one output cell that has no type field as proxy lock cell.
  *
  * phase2:
  * 1. check `inputs WCKB - outputs WCKB = Y`.
- * 2. at least one input cell that do not has the type field is from the same transaction.
- * or:
- * 2. the since field of inputs is set to relatively `W` blocks.
+ * 2. has one input cell that has no type field, and created from the same
+ * transaction of withdraw cell. or:
+ * 2. the since field of inputs are set to a value which large or equals to
+ * relatively `W` blocks.
  *
- * HINT: we use a cell as unlock proof to break the restriction of NervosDAO.
+ * HINT: we use a proxy lock cell as ownership proof to break the restriction of
+ * NervosDAO.
  *
- * Args:
+ * Script args:
  * This script accept 32 bytes args: <wckb type hash>
  * <wckb type hash>: blake2b(Script(hash_type: Type, code_hash: <wckb type id>))
+ *
+ * Witness args:
+ * This script expect a WitnessArgs and its lock:
+ * <lock index>: a uint8 value to indicates proxy lock cell in phase1 and
+ * phase2.
  */
 
-
-/* check inputs, return input WCKB */
-int fetch_inputs(unsigned char *wckb_type_hash,
-                 TokenInfo withdraw_dao_infos[MAX_SWAPS], int *input_wckb_cnt,
-                 TokenInfo input_wckb_infos[MAX_SWAPS]) {
-
-  *withdraw_dao_cnt = 0;
-  *input_wckb_cnt = 0;
-  int i = 0;
+/* load wckb type hash from script.args */
+int load_wckb_type_hash(uint8_t wckb_type_hash[HASH_SIZE]) {
   int ret;
-  uint64_t len;
-  while (1) {
-    unsigned char input_type_hash[HASH_SIZE];
-    len = HASH_SIZE;
-    ret = ckb_checked_load_cell_by_field(input_type_hash, &len, 0, i,
-                                         CKB_SOURCE_INPUT,
-                                         CKB_CELL_FIELD_TYPE_HASH);
-    if (ret == CKB_INDEX_OUT_OF_BOUND) {
-      break;
-    }
-    if (ret == CKB_ITEM_MISSING) {
-      i++;
-      continue;
-    }
-    printf("load cell type ret %d len %ld", ret, len);
-    if (ret != CKB_SUCCESS || len != HASH_SIZE) {
-      return ERROR_LOAD_TYPE_HASH;
-    }
-    uint8_t buf[UDT_LEN + BLOCK_NUM_LEN];
-    len = UDT_LEN + BLOCK_NUM_LEN;
-    ret = ckb_load_cell_data(buf, &len, 0, i, CKB_SOURCE_INPUT);
-    if (ret == CKB_ITEM_MISSING) {
-      i++;
-      continue;
-    }
-    printf("load input cell data ret %d len %ld", ret, len);
-    if (ret != CKB_SUCCESS || len > UDT_LEN + BLOCK_NUM_LEN) {
-      return ERROR_LOAD_TYPE_HASH;
-    }
-    int is_dao = is_dao_withdraw1_cell(input_type_hash, buf, len);
-    if (is_dao) {
-      printf("check a new withdraw cell");
-      /* withdraw NervosDAO */
-      uint64_t deposited_block_number = *(uint64_t *)buf;
-      size_t deposit_index;
-      ret = extract_deposit_header_index(i, &deposit_index);
-      if (ret != CKB_SUCCESS) {
-        return ret;
-      }
-      /* calculate withdraw amount */
-      dao_header_data_t deposit_data;
-      load_dao_header_data(deposit_index, CKB_SOURCE_HEADER_DEP, &deposit_data);
-      dao_header_data_t withdraw_data;
-      load_dao_header_data(i, CKB_SOURCE_INPUT, &withdraw_data);
-      uint64_t occupied_capacity;
-      len = CKB_LEN;
-      ret = ckb_checked_load_cell_by_field((uint8_t *)&occupied_capacity, &len,
-                                           0, i, CKB_SOURCE_INPUT,
-                                           CKB_CELL_FIELD_OCCUPIED_CAPACITY);
-      if (ret != CKB_SUCCESS || len != CKB_LEN) {
-        return ERROR_LOAD_OCCUPIED_CAPACITY;
-      }
-      if (occupied_capacity != DAO_OCCUPIED_CAPACITY) {
-        printf("input DAO occupied capacity %ld, expected %ld",
-                occupied_capacity, DAO_OCCUPIED_CAPACITY);
-        i += 1;
-        continue;
-      }
-      len = CKB_LEN;
-      uint64_t original_capacity;
-      ret = ckb_checked_load_cell_by_field((uint8_t *)&original_capacity, &len,
-                                           0, i, CKB_SOURCE_INPUT,
-                                           CKB_CELL_FIELD_CAPACITY);
-      if (ret != CKB_SUCCESS || len != CKB_LEN) {
-        return ERROR_LOAD_CAPACITY;
-      }
-      uint64_t calculated_capacity = 0;
-      calculate_dao_input_capacity(occupied_capacity, deposit_data,
-                                   withdraw_data, deposited_block_number,
-                                   original_capacity, &calculated_capacity);
-      /* record withdraw amount */
-      int j = *withdraw_dao_cnt;
-      *withdraw_dao_cnt += 1;
-      withdraw_dao_infos[j].amount = calculated_capacity;
-      withdraw_dao_infos[j].block_number = withdraw_data.block_number;
-    } else if (memcmp(input_type_hash, type_hash, HASH_SIZE) == 0) {
-      /* WCKB */
-      uint128_t amount;
-      uint64_t block_number;
-      if (len != UDT_LEN + BLOCK_NUM_LEN) {
-        return ERROR_LOAD_WCKB_DATA;
-      }
-      amount = *(uint128_t *)buf;
-      block_number = *(uint64_t *)(buf + UDT_LEN);
-      /* record input amount */
-      int j = *input_wckb_cnt;
-      *input_wckb_cnt += 1;
-      input_wckb_infos[j].amount = amount;
-      input_wckb_infos[j].block_number = block_number;
-    }
-    i++;
+  uint64_t len = 0;
+  uint8_t script[MAX_SCRIPT_SIZE];
+
+  len = MAX_SCRIPT_SIZE;
+  ret = ckb_checked_load_script(script, &len, 0);
+  if (ret != CKB_SUCCESS) {
+    return ret;
   }
+  if (len > MAX_SCRIPT_SIZE) {
+    return ERROR_ENCODING;
+  }
+
+  mol_seg_t script_seg;
+  script_seg.ptr = (uint8_t *)script;
+  script_seg.size = len;
+
+  if (MolReader_Script_verify(&script_seg, false) != MOL_OK) {
+    return ERROR_ENCODING;
+  }
+  /* Load type args */
+  mol_seg_t args_seg = MolReader_Script_get_args(&script_seg);
+
+  mol_seg_t raw_args_seg = MolReader_Bytes_raw_bytes(&args_seg);
+  if (raw_args_seg.size != HASH_SIZE) {
+    return ERROR_ENCODING;
+  }
+
+  memcpy(wckb_type_hash, raw_args_seg.ptr, HASH_SIZE);
   return CKB_SUCCESS;
 }
 
-int main() { return 0; }
+/* load proxy lock cell index from witness_args.lock */
+int load_proxy_lock_cell_index(uint8_t *index) {
+  int ret;
+  uint64_t len = 0;
+  uint8_t witness[MAX_WITNESS_SIZE];
+
+  len = MAX_WITNESS_SIZE;
+  ret = ckb_load_witness(witness, &len, 0, 0, CKB_SOURCE_GROUP_INPUT);
+  if (ret != CKB_SUCCESS) {
+    return ret;
+  }
+  if (len > MAX_WITNESS_SIZE) {
+    return ERROR_WITNESS_TOO_LONG;
+  }
+
+  mol_seg_t witness_seg;
+  witness_seg.ptr = (uint8_t *)witness;
+  witness_seg.size = len;
+
+  if (MolReader_WitnessArgs_verify(&witness_seg, false) != MOL_OK) {
+    return ERROR_LOAD_WITNESS_ARGS;
+  }
+  /* Load type args */
+  mol_seg_t lock_seg = MolReader_WitnessArgs_get_lock(&witness_seg);
+
+  if (MolReader_BytesOpt_is_none(&lock_seg)) {
+    return ERROR_ENCODING;
+  }
+
+  mol_seg_t lock_bytes_seg = MolReader_Bytes_raw_bytes(&lock_seg);
+  if (lock_bytes_seg.size != 1) {
+    return ERROR_ENCODING;
+  }
+
+  *index = *(uint8_t *)lock_bytes_seg.ptr;
+  return CKB_SUCCESS;
+}
+
+int main() {
+  uint8_t proxy_lock_cell_i = 0;
+  uint8_t wckb_type_hash[HASH_SIZE];
+  int ret = load_proxy_lock_cell_index(&proxy_lock_cell_i);
+  if (ret != CKB_SUCCESS) {
+    return ret;
+  }
+  ret = load_wckb_type_hash(wckb_type_hash);
+  if (ret != CKB_SUCCESS) {
+    return ret;
+  }
+  return CKB_SUCCESS;
+}

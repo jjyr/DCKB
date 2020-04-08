@@ -53,8 +53,8 @@ typedef unsigned __int128 uint128_t;
 #define DAO_OCCUPIED_CAPACITY 10200000000
 
 #include "ckb_syscalls.h"
-#include "protocol.h"
 #include "dao_utils.h"
+#include "protocol.h"
 
 typedef struct {
   uint128_t amount;
@@ -67,13 +67,15 @@ typedef struct {
 } TokenInfo;
 
 /* fetch inputs coins */
-int fetch_inputs(unsigned char *wckb_type_hash, int *withdraw_dao_cnt,
-                 TokenInfo withdraw_dao_infos[MAX_SWAP_CELLS],
+int fetch_inputs(unsigned char *wckb_type_hash, int *withdraw1_dao_cnt,
+                 TokenInfo withdraw1_dao_infos[MAX_SWAP_CELLS],
+                 int *withdraw2_dao_cnt,
+                 TokenInfo withdraw2_dao_infos[MAX_SWAP_CELLS],
                  int *input_wckb_cnt,
                  TokenInfo input_wckb_infos[MAX_SWAP_CELLS]) {
-
-  *withdraw_dao_cnt = 0;
-  *input_wckb_cnt = 0;
+  if (withdraw1_dao_cnt) *withdraw1_dao_cnt = 0;
+  if (withdraw2_dao_cnt) *withdraw2_dao_cnt = 0;
+  if (input_wckb_cnt) *input_wckb_cnt = 0;
   int i = 0;
   int ret;
   uint64_t len;
@@ -87,8 +89,7 @@ int fetch_inputs(unsigned char *wckb_type_hash, int *withdraw_dao_cnt,
       break;
     }
     if (ret == CKB_ITEM_MISSING) {
-      i++;
-      continue;
+      goto next;
     }
     printf("load cell type ret %d len %ld", ret, len);
     if (ret != CKB_SUCCESS || len != HASH_SIZE) {
@@ -98,14 +99,13 @@ int fetch_inputs(unsigned char *wckb_type_hash, int *withdraw_dao_cnt,
     len = UDT_LEN + BLOCK_NUM_LEN;
     ret = ckb_load_cell_data(buf, &len, 0, i, CKB_SOURCE_INPUT);
     if (ret == CKB_ITEM_MISSING) {
-      i++;
-      continue;
+      goto next;
     }
     printf("load input cell data ret %d len %ld", ret, len);
     if (ret != CKB_SUCCESS || len > UDT_LEN + BLOCK_NUM_LEN) {
       return ERROR_LOAD_TYPE_HASH;
     }
-    int is_dao = is_dao_withdraw1_cell(input_type_hash, buf, len);
+    int is_dao = is_dao_type(input_type_hash);
     if (is_dao) {
       printf("check a new withdraw cell");
       /* withdraw NervosDAO */
@@ -119,11 +119,25 @@ int fetch_inputs(unsigned char *wckb_type_hash, int *withdraw_dao_cnt,
         return ERROR_LOAD_CAPACITY;
       }
       /* record withdraw amount */
-      int j = *withdraw_dao_cnt;
-      *withdraw_dao_cnt += 1;
-      withdraw_dao_infos[j].amount = original_capacity;
-      withdraw_dao_infos[j].block_number = deposited_block_number;
-      withdraw_dao_infos[j].cell_index = i;
+      if (is_dao_withdraw1_cell(buf, len)) {
+        if (!withdraw1_dao_cnt || !withdraw1_dao_infos) {
+          goto next;
+        }
+        int j = *withdraw1_dao_cnt;
+        *withdraw1_dao_cnt += 1;
+        withdraw1_dao_infos[j].amount = original_capacity;
+        withdraw1_dao_infos[j].block_number = deposited_block_number;
+        withdraw1_dao_infos[j].cell_index = i;
+      } else {
+        if (!withdraw2_dao_cnt || !withdraw2_dao_infos) {
+          goto next;
+        }
+        int j = *withdraw2_dao_cnt;
+        *withdraw2_dao_cnt += 1;
+        withdraw2_dao_infos[j].amount = original_capacity;
+        withdraw2_dao_infos[j].block_number = deposited_block_number;
+        withdraw2_dao_infos[j].cell_index = i;
+      }
     } else if (memcmp(input_type_hash, wckb_type_hash, HASH_SIZE) == 0) {
       /* WCKB */
       uint128_t amount;
@@ -140,6 +154,7 @@ int fetch_inputs(unsigned char *wckb_type_hash, int *withdraw_dao_cnt,
       input_wckb_infos[j].block_number = block_number;
       input_wckb_infos[j].cell_index = i;
     }
+  next:
     i++;
   }
   return CKB_SUCCESS;
@@ -151,9 +166,9 @@ int fetch_outputs(unsigned char *wckb_type_hash, int *deposited_dao_cnt,
                   int *new_wckb_cell_cnt,
                   SwapInfo new_wckb_cell[MAX_SWAP_CELLS], int *wckb_cell_cnt,
                   TokenInfo wckb_cell[MAX_SWAP_CELLS]) {
-  *deposited_dao_cnt = 0;
-  *new_wckb_cell_cnt = 0;
-  *wckb_cell_cnt = 0;
+  if (deposited_dao_cnt) *deposited_dao_cnt = 0;
+  if (new_wckb_cell_cnt) *new_wckb_cell_cnt = 0;
+  if (wckb_cell_cnt) *wckb_cell_cnt = 0;
   int ret;
   /* iterate all outputs */
   int i = 0;
@@ -168,8 +183,7 @@ int fetch_outputs(unsigned char *wckb_type_hash, int *deposited_dao_cnt,
       break;
     }
     if (ret == CKB_ITEM_MISSING) {
-      i++;
-      continue;
+      goto next;
     }
     if (ret != CKB_SUCCESS || len != HASH_SIZE) {
       return ERROR_LOAD_TYPE_HASH;
@@ -178,16 +192,16 @@ int fetch_outputs(unsigned char *wckb_type_hash, int *deposited_dao_cnt,
     uint8_t buf[BLOCK_NUM_LEN + UDT_LEN];
     ret = ckb_load_cell_data(buf, &len, 0, i, CKB_SOURCE_OUTPUT);
     if (ret == CKB_ITEM_MISSING) {
-      i++;
-      continue;
+      goto next;
     }
     if (ret != CKB_SUCCESS || len > (UDT_LEN + BLOCK_NUM_LEN)) {
       return ERROR_LOAD_WCKB_DATA;
     }
-    int is_dao = is_dao_deposit_cell(output_type_hash, buf, len);
+    int is_dao = is_dao_type(output_type_hash) && is_dao_deposit_cell(buf, len);
     printf("check output is dao %d", is_dao);
     if (is_dao) {
       printf("check a new deposit cell");
+      if (!deposited_dao_cnt || !deposited_dao) goto next;
       /* check deposited dao cell */
       uint64_t amount;
       len = CKB_LEN;
@@ -213,6 +227,7 @@ int fetch_outputs(unsigned char *wckb_type_hash, int *deposited_dao_cnt,
       amount = *(uint128_t *)buf;
       block_number = *(uint64_t *)(buf + UDT_LEN);
       if (block_number == 0) {
+        if (!new_wckb_cell_cnt || !new_wckb_cell) goto next;
         /* new wckb */
         if (*new_wckb_cell_cnt >= MAX_SWAP_CELLS) {
           return ERROR_TOO_MANY_SWAPS;
@@ -221,6 +236,7 @@ int fetch_outputs(unsigned char *wckb_type_hash, int *deposited_dao_cnt,
         *new_wckb_cell_cnt += 1;
         new_wckb_cell[new_i].amount = amount;
       } else {
+        if (!wckb_cell_cnt || !wckb_cell) goto next;
         /* wckb */
         if (*wckb_cell_cnt >= MAX_SWAP_CELLS) {
           return ERROR_TOO_MANY_SWAPS;
@@ -231,6 +247,7 @@ int fetch_outputs(unsigned char *wckb_type_hash, int *deposited_dao_cnt,
         wckb_cell[new_i].block_number = block_number;
       }
     }
+  next:
     i++;
   }
   return CKB_SUCCESS;
@@ -248,7 +265,7 @@ int align_dao_compensation(size_t i, size_t source,
 
   if (align_target_data.block_number < deposited_block_number) {
     printf("align %ld deposit block %ld", align_target_data.block_number,
-            deposited_block_number);
+           deposited_block_number);
     return ERROR_ALIGN;
   }
   dao_header_data_t deposit_data;

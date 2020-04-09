@@ -1,4 +1,4 @@
-use super::{sign_tx, DummyDataLoader, MAX_CYCLES, WCKB};
+use super::{sign_tx, DummyDataLoader, MAX_CYCLES, DCKB};
 use byteorder::{ByteOrder, LittleEndian};
 use ckb_crypto::secp::{Generator, Privkey};
 use ckb_dao_utils::pack_dao_data;
@@ -40,13 +40,13 @@ lazy_static! {
             .to_owned()
             .to_vec()
     );
-    static ref WCKB_CAPACITY: Capacity = Capacity::bytes(65).expect("bytes");
+    static ref DCKB_CAPACITY: Capacity = Capacity::bytes(65).expect("bytes");
 }
 
 const DAO_TYPE_ID: [u8; 32] = [0u8; 32];
 
-fn wckb_script() -> Script {
-    let code_hash = CellOutput::calc_data_hash(&WCKB);
+fn dckb_script() -> Script {
+    let code_hash = CellOutput::calc_data_hash(&DCKB);
     Script::new_builder()
         .code_hash(code_hash)
         .hash_type(ScriptHashType::Data.into())
@@ -54,17 +54,17 @@ fn wckb_script() -> Script {
         .build()
 }
 
-fn wckb_data(ckb: u128, block_number: u64) -> Bytes {
+fn dckb_data(ckb: u128, block_number: u64) -> Bytes {
     let mut data = [0u8; 24];
     data[..16].copy_from_slice(&ckb.to_le_bytes()[..]);
     data[16..].copy_from_slice(&block_number.to_le_bytes()[..]);
     data.to_vec().into()
 }
 
-fn wckb_cell_output() -> CellOutput {
+fn dckb_cell_output() -> CellOutput {
     CellOutput::new_builder()
-        .capacity(WCKB_CAPACITY.pack())
-        .type_(Some(wckb_script()).pack())
+        .capacity(DCKB_CAPACITY.pack())
+        .type_(Some(dckb_script()).pack())
         .build()
 }
 
@@ -129,7 +129,7 @@ fn gen_normal_cell(
     (cell, out_point)
 }
 
-fn gen_wckb_cell(
+fn gen_dckb_cell(
     dummy: &mut DummyDataLoader,
     capacity: Capacity,
     lock_args: Bytes,
@@ -142,13 +142,13 @@ fn gen_wckb_cell(
         .code_hash(secp_code_hash())
         .hash_type(ScriptHashType::Data.into())
         .build();
-    let type_ = wckb_script();
+    let type_ = dckb_script();
     let cell = CellOutput::new_builder()
-        .capacity(WCKB_CAPACITY.pack())
+        .capacity(DCKB_CAPACITY.pack())
         .lock(lock)
         .type_(Some(type_).pack())
         .build();
-    let data = wckb_data(capacity.as_u64().into(), height);
+    let data = dckb_data(capacity.as_u64().into(), height);
     dummy
         .cells
         .insert(out_point.clone(), (cell.clone(), data.clone()));
@@ -229,7 +229,7 @@ fn complete_tx(
     let (secp_cell, secp_out_point) = script_cell(&SIGHASH_ALL_BIN);
     let (secp_data_cell, secp_data_out_point) = script_cell(&SECP256K1_DATA_BIN);
     let (dao_cell, dao_out_point) = script_cell(&DAO_BIN);
-    let (wckb_cell, wckb_out_point) = script_cell(&WCKB);
+    let (dckb_cell, dckb_out_point) = script_cell(&DCKB);
 
     let secp_cell_meta =
         CellMetaBuilder::from_cell_output(secp_cell.clone(), SIGHASH_ALL_BIN.clone())
@@ -242,8 +242,8 @@ fn complete_tx(
     let dao_cell_meta = CellMetaBuilder::from_cell_output(dao_cell.clone(), DAO_BIN.clone())
         .out_point(dao_out_point.clone())
         .build();
-    let wckb_cell_meta = CellMetaBuilder::from_cell_output(wckb_cell.clone(), WCKB.clone())
-        .out_point(wckb_out_point.clone())
+    let dckb_cell_meta = CellMetaBuilder::from_cell_output(dckb_cell.clone(), DCKB.clone())
+        .out_point(dckb_out_point.clone())
         .build();
 
     dummy
@@ -258,7 +258,7 @@ fn complete_tx(
         .insert(dao_out_point.clone(), (dao_cell, DAO_BIN.clone()));
     dummy
         .cells
-        .insert(wckb_out_point.clone(), (wckb_cell, WCKB.clone()));
+        .insert(dckb_out_point.clone(), (dckb_cell, DCKB.clone()));
 
     let tx = builder
         .cell_dep(
@@ -281,7 +281,7 @@ fn complete_tx(
         )
         .cell_dep(
             CellDep::new_builder()
-                .out_point(wckb_out_point)
+                .out_point(dckb_out_point)
                 .dep_type(DepType::Code.into())
                 .build(),
         )
@@ -291,13 +291,13 @@ fn complete_tx(
     resolved_cell_deps.push(secp_cell_meta);
     resolved_cell_deps.push(secp_data_cell_meta);
     resolved_cell_deps.push(dao_cell_meta);
-    resolved_cell_deps.push(wckb_cell_meta);
+    resolved_cell_deps.push(dckb_cell_meta);
 
     (tx, resolved_cell_deps)
 }
 
 #[test]
-fn test_wckb_withdraw() {
+fn test_dckb_withdraw() {
     let mut data_loader = DummyDataLoader::new();
     let (privkey, lock_args) = gen_lock();
 
@@ -308,7 +308,7 @@ fn test_wckb_withdraw() {
         Capacity::shannons(123456780000),
         lock_args.clone(),
     );
-    let (wckb_cell, wckb_previous_out_point, wckb_cell_data) = gen_wckb_cell(
+    let (dckb_cell, dckb_previous_out_point, dckb_cell_data) = gen_dckb_cell(
         &mut data_loader,
         Capacity::shannons(123468105678),
         lock_args,
@@ -339,9 +339,9 @@ fn test_wckb_withdraw() {
             index: 0,
         })
         .build();
-    let input_wckb_cell_meta =
-        CellMetaBuilder::from_cell_output(wckb_cell, Bytes::from(&wckb_cell_data[..]))
-            .out_point(wckb_previous_out_point.clone())
+    let input_dckb_cell_meta =
+        CellMetaBuilder::from_cell_output(dckb_cell, Bytes::from(&dckb_cell_data[..]))
+            .out_point(dckb_previous_out_point.clone())
             .transaction_info(TransactionInfo {
                 block_hash: deposit_header.hash(),
                 block_number: deposit_header.number(),
@@ -350,7 +350,7 @@ fn test_wckb_withdraw() {
             })
             .build();
 
-    let resolved_inputs = vec![input_cell_meta, input_wckb_cell_meta];
+    let resolved_inputs = vec![input_cell_meta, input_dckb_cell_meta];
     let mut resolved_cell_deps = vec![];
     let align_target_index: u64 = 0;
 
@@ -359,18 +359,18 @@ fn test_wckb_withdraw() {
     let witness = WitnessArgs::new_builder()
         .type_(Bytes::from(&b[..]).pack())
         .build();
-    let wckb_witness = WitnessArgs::new_builder()
+    let dckb_witness = WitnessArgs::new_builder()
         .type_(Bytes::from(&align_target_index.to_le_bytes()[..]).pack())
         .build();
     let builder = TransactionBuilder::default()
         .input(CellInput::new(previous_out_point, 0x2003e8022a0002f3))
-        .input(CellInput::new(wckb_previous_out_point, 0))
+        .input(CellInput::new(dckb_previous_out_point, 0))
         .output(cell_output_with_only_capacity(123468105678))
         .output_data(Bytes::new().pack())
         .header_dep(withdraw_header.hash())
         .header_dep(deposit_header.hash())
         .witness(witness.as_bytes().pack())
-        .witness(wckb_witness.as_bytes().pack());
+        .witness(dckb_witness.as_bytes().pack());
     let (tx, mut resolved_cell_deps2) = complete_tx(&mut data_loader, builder);
     let tx = sign_tx(tx, &privkey);
     for dep in resolved_cell_deps2.drain(..) {
@@ -390,7 +390,7 @@ fn test_wckb_withdraw() {
 }
 
 #[test]
-fn test_wckb_transfer() {
+fn test_dckb_transfer() {
     const DAO_OCCUPIED_CAPACITY: u64 = 102_00000000u64;
     let mut data_loader = DummyDataLoader::new();
     let (privkey, lock_args) = gen_lock();
@@ -405,13 +405,13 @@ fn test_wckb_transfer() {
     let transfer_coin: u64 = 10000_00000000;
     let (header1, header1_epoch) = gen_header(1554, ar1, 35, 1000, 1000);
     let (header2, header2_epoch) = gen_header(2000610, ar2, 575, 2000000, 1100);
-    let (wckb_cell1, wckb_previous_out_point1, wckb_cell_data1) = gen_wckb_cell(
+    let (dckb_cell1, dckb_previous_out_point1, dckb_cell_data1) = gen_dckb_cell(
         &mut data_loader,
         Capacity::shannons(sender_coin),
         lock_args.clone(),
         0,
     );
-    let (wckb_cell2, wckb_previous_out_point2, wckb_cell_data2) = gen_wckb_cell(
+    let (dckb_cell2, dckb_previous_out_point2, dckb_cell_data2) = gen_dckb_cell(
         &mut data_loader,
         Capacity::shannons(receiver_coin),
         lock_args,
@@ -428,8 +428,8 @@ fn test_wckb_transfer() {
         .insert(header2.hash(), header2_epoch.clone());
 
     let input_cell_meta =
-        CellMetaBuilder::from_cell_output(wckb_cell1, Bytes::from(&wckb_cell_data1[..]))
-            .out_point(wckb_previous_out_point1.clone())
+        CellMetaBuilder::from_cell_output(dckb_cell1, Bytes::from(&dckb_cell_data1[..]))
+            .out_point(dckb_previous_out_point1.clone())
             .transaction_info(TransactionInfo {
                 block_hash: header1.hash(),
                 block_number: header1.number(),
@@ -437,9 +437,9 @@ fn test_wckb_transfer() {
                 index: 0,
             })
             .build();
-    let input_wckb_cell_meta =
-        CellMetaBuilder::from_cell_output(wckb_cell2, Bytes::from(&wckb_cell_data2[..]))
-            .out_point(wckb_previous_out_point2.clone())
+    let input_dckb_cell_meta =
+        CellMetaBuilder::from_cell_output(dckb_cell2, Bytes::from(&dckb_cell_data2[..]))
+            .out_point(dckb_previous_out_point2.clone())
             .transaction_info(TransactionInfo {
                 block_hash: header2.hash(),
                 block_number: header2.number(),
@@ -448,30 +448,30 @@ fn test_wckb_transfer() {
             })
             .build();
 
-    let resolved_inputs = vec![input_cell_meta, input_wckb_cell_meta];
+    let resolved_inputs = vec![input_cell_meta, input_dckb_cell_meta];
     let mut resolved_cell_deps = vec![];
     let align_target_index: u64 = 1;
 
-    let wckb_witness = WitnessArgs::new_builder()
+    let dckb_witness = WitnessArgs::new_builder()
         .type_(Bytes::from(&align_target_index.to_le_bytes()[..]).pack())
         .build();
     // transfer 10000 from 1 to 2
     let builder = TransactionBuilder::default()
-        .input(CellInput::new(wckb_previous_out_point1, 0))
-        .input(CellInput::new(wckb_previous_out_point2, 0))
-        .output(wckb_cell_output())
+        .input(CellInput::new(dckb_previous_out_point1, 0))
+        .input(CellInput::new(dckb_previous_out_point2, 0))
+        .output(dckb_cell_output())
         .output_data(
-            wckb_data(
+            dckb_data(
                 (sender_withdraw_coin - transfer_coin).into(),
                 header2.number(),
             )
             .pack(),
         )
-        .output(wckb_cell_output())
-        .output_data(wckb_data((receiver_coin + transfer_coin).into(), header2.number()).pack())
+        .output(dckb_cell_output())
+        .output_data(dckb_data((receiver_coin + transfer_coin).into(), header2.number()).pack())
         .header_dep(header1.hash())
         .header_dep(header2.hash())
-        .witness(wckb_witness.as_bytes().pack())
+        .witness(dckb_witness.as_bytes().pack())
         .witness(WitnessArgs::default().as_bytes().pack());
     let (tx, mut resolved_cell_deps2) = complete_tx(&mut data_loader, builder);
     let tx = sign_tx(tx, &privkey);
@@ -492,7 +492,7 @@ fn test_wckb_transfer() {
 }
 
 #[test]
-fn test_wckb_deposit() {
+fn test_dckb_deposit() {
     let mut data_loader = DummyDataLoader::new();
     let (privkey, lock_args) = gen_lock();
 
@@ -539,12 +539,12 @@ fn test_wckb_deposit() {
 
     let (output_cell, _) = gen_dao_cell(
         &mut data_loader,
-        Capacity::shannons(123456780000 - WCKB_CAPACITY.as_u64() - change_coin),
+        Capacity::shannons(123456780000 - DCKB_CAPACITY.as_u64() - change_coin),
         lock_args.clone(),
     );
-    let (wckb_output_cell, _, wckb_output_data) = gen_wckb_cell(
+    let (dckb_output_cell, _, dckb_output_data) = gen_dckb_cell(
         &mut data_loader,
-        Capacity::shannons(123456780000 - WCKB_CAPACITY.as_u64() - change_coin),
+        Capacity::shannons(123456780000 - DCKB_CAPACITY.as_u64() - change_coin),
         lock_args,
         0,
     );
@@ -554,8 +554,8 @@ fn test_wckb_deposit() {
         .input(CellInput::new(previous_out_point, 0))
         .output(output_cell)
         .output_data(Bytes::from(b.to_vec()).pack())
-        .output(wckb_output_cell)
-        .output_data(wckb_output_data.pack())
+        .output(dckb_output_cell)
+        .output_data(dckb_output_data.pack())
         .output(change_output_cell)
         .output_data(Bytes::new().pack())
         .witness(WitnessArgs::default().as_bytes().pack());

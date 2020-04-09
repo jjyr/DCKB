@@ -25,9 +25,9 @@ typedef unsigned __int128 uint128_t;
 #define ERROR_PUBKEY_BLAKE160_HASH -31
 /* anyone can pay errors */
 #define ERROR_OVERFLOW -41
-#define ERROR_INCORRECT_OUTPUT_WCKB -42
+#define ERROR_INCORRECT_OUTPUT_DCKB -42
 #define ERROR_TOO_MANY_SWAPS -43
-#define ERROR_INCORRECT_UNINIT_OUTPUT_WCKB -44
+#define ERROR_INCORRECT_UNINIT_OUTPUT_DCKB -44
 #define ERROR_ALIGN -45
 #define ERROR_OUTPUT_ALIGN -46
 #define ERROR_LOAD_SCRIPT -50
@@ -37,7 +37,7 @@ typedef unsigned __int128 uint128_t;
 #define ERROR_LOAD_TYPE_HASH -54
 #define ERROR_LOAD_OCCUPIED_CAPACITY -55
 #define ERROR_LOAD_CAPACITY -56
-#define ERROR_LOAD_WCKB_DATA -57
+#define ERROR_LOAD_DCKB_DATA -57
 
 /* since */
 #define SINCE_VALUE_BITS 56
@@ -67,15 +67,15 @@ typedef struct {
 } TokenInfo;
 
 /* fetch inputs coins */
-int fetch_inputs(unsigned char *wckb_type_hash, int *withdraw1_dao_cnt,
+int fetch_inputs(unsigned char *dckb_type_hash, int *withdraw1_dao_cnt,
                  TokenInfo withdraw1_dao_infos[MAX_SWAP_CELLS],
                  int *withdraw2_dao_cnt,
                  TokenInfo withdraw2_dao_infos[MAX_SWAP_CELLS],
-                 int *input_wckb_cnt,
-                 TokenInfo input_wckb_infos[MAX_SWAP_CELLS]) {
+                 int *input_dckb_cnt,
+                 TokenInfo input_dckb_infos[MAX_SWAP_CELLS]) {
   if (withdraw1_dao_cnt) *withdraw1_dao_cnt = 0;
   if (withdraw2_dao_cnt) *withdraw2_dao_cnt = 0;
-  if (input_wckb_cnt) *input_wckb_cnt = 0;
+  if (input_dckb_cnt) *input_dckb_cnt = 0;
   int i = 0;
   int ret;
   uint64_t len;
@@ -138,21 +138,21 @@ int fetch_inputs(unsigned char *wckb_type_hash, int *withdraw1_dao_cnt,
         withdraw2_dao_infos[j].block_number = deposited_block_number;
         withdraw2_dao_infos[j].cell_index = i;
       }
-    } else if (memcmp(input_type_hash, wckb_type_hash, HASH_SIZE) == 0) {
-      /* WCKB */
+    } else if (memcmp(input_type_hash, dckb_type_hash, HASH_SIZE) == 0) {
+      /* DCKB */
       uint128_t amount;
       uint64_t block_number;
       if (len != UDT_LEN + BLOCK_NUM_LEN) {
-        return ERROR_LOAD_WCKB_DATA;
+        return ERROR_LOAD_DCKB_DATA;
       }
       amount = *(uint128_t *)buf;
       block_number = *(uint64_t *)(buf + UDT_LEN);
       /* record input amount */
-      int j = *input_wckb_cnt;
-      *input_wckb_cnt += 1;
-      input_wckb_infos[j].amount = amount;
-      input_wckb_infos[j].block_number = block_number;
-      input_wckb_infos[j].cell_index = i;
+      int j = *input_dckb_cnt;
+      *input_dckb_cnt += 1;
+      input_dckb_infos[j].amount = amount;
+      input_dckb_infos[j].block_number = block_number;
+      input_dckb_infos[j].cell_index = i;
     }
   next:
     i++;
@@ -161,14 +161,14 @@ int fetch_inputs(unsigned char *wckb_type_hash, int *withdraw1_dao_cnt,
 }
 
 /* fetch outputs coins */
-int fetch_outputs(unsigned char *wckb_type_hash, int *deposited_dao_cnt,
+int fetch_outputs(unsigned char *dckb_type_hash, int *deposited_dao_cnt,
                   SwapInfo deposited_dao[MAX_SWAP_CELLS],
-                  int *new_wckb_cell_cnt,
-                  SwapInfo new_wckb_cell[MAX_SWAP_CELLS], int *wckb_cell_cnt,
-                  TokenInfo wckb_cell[MAX_SWAP_CELLS]) {
+                  int *new_dckb_cell_cnt,
+                  SwapInfo new_dckb_cell[MAX_SWAP_CELLS], int *dckb_cell_cnt,
+                  TokenInfo dckb_cell[MAX_SWAP_CELLS]) {
   if (deposited_dao_cnt) *deposited_dao_cnt = 0;
-  if (new_wckb_cell_cnt) *new_wckb_cell_cnt = 0;
-  if (wckb_cell_cnt) *wckb_cell_cnt = 0;
+  if (new_dckb_cell_cnt) *new_dckb_cell_cnt = 0;
+  if (dckb_cell_cnt) *dckb_cell_cnt = 0;
   int ret;
   /* iterate all outputs */
   int i = 0;
@@ -195,7 +195,7 @@ int fetch_outputs(unsigned char *wckb_type_hash, int *deposited_dao_cnt,
       goto next;
     }
     if (ret != CKB_SUCCESS || len > (UDT_LEN + BLOCK_NUM_LEN)) {
-      return ERROR_LOAD_WCKB_DATA;
+      return ERROR_LOAD_DCKB_DATA;
     }
     int is_dao = is_dao_type(output_type_hash) && is_dao_deposit_cell(buf, len);
     printf("check output is dao %d", is_dao);
@@ -217,34 +217,34 @@ int fetch_outputs(unsigned char *wckb_type_hash, int *deposited_dao_cnt,
       int new_i = *deposited_dao_cnt;
       *deposited_dao_cnt += 1;
       deposited_dao[new_i].amount = amount;
-    } else if (memcmp(output_type_hash, wckb_type_hash, HASH_SIZE) == 0) {
-      /* check wckb cell */
+    } else if (memcmp(output_type_hash, dckb_type_hash, HASH_SIZE) == 0) {
+      /* check dckb cell */
       uint128_t amount;
       uint64_t block_number;
       if (len != (UDT_LEN + BLOCK_NUM_LEN)) {
-        return ERROR_LOAD_WCKB_DATA;
+        return ERROR_LOAD_DCKB_DATA;
       }
       amount = *(uint128_t *)buf;
       block_number = *(uint64_t *)(buf + UDT_LEN);
       if (block_number == 0) {
-        if (!new_wckb_cell_cnt || !new_wckb_cell) goto next;
-        /* new wckb */
-        if (*new_wckb_cell_cnt >= MAX_SWAP_CELLS) {
+        if (!new_dckb_cell_cnt || !new_dckb_cell) goto next;
+        /* new dckb */
+        if (*new_dckb_cell_cnt >= MAX_SWAP_CELLS) {
           return ERROR_TOO_MANY_SWAPS;
         }
-        int new_i = *new_wckb_cell_cnt;
-        *new_wckb_cell_cnt += 1;
-        new_wckb_cell[new_i].amount = amount;
+        int new_i = *new_dckb_cell_cnt;
+        *new_dckb_cell_cnt += 1;
+        new_dckb_cell[new_i].amount = amount;
       } else {
-        if (!wckb_cell_cnt || !wckb_cell) goto next;
-        /* wckb */
-        if (*wckb_cell_cnt >= MAX_SWAP_CELLS) {
+        if (!dckb_cell_cnt || !dckb_cell) goto next;
+        /* dckb */
+        if (*dckb_cell_cnt >= MAX_SWAP_CELLS) {
           return ERROR_TOO_MANY_SWAPS;
         }
-        int new_i = *wckb_cell_cnt;
-        *wckb_cell_cnt += 1;
-        wckb_cell[new_i].amount = amount;
-        wckb_cell[new_i].block_number = block_number;
+        int new_i = *dckb_cell_cnt;
+        *dckb_cell_cnt += 1;
+        dckb_cell[new_i].amount = amount;
+        dckb_cell[new_i].block_number = block_number;
       }
     }
   next:
@@ -273,7 +273,7 @@ int align_dao_compensation(size_t i, size_t source,
   if (ret != CKB_SUCCESS) {
     return ret;
   }
-  /* new wckb */
+  /* new dckb */
   if (deposited_block_number == 0) {
     deposited_block_number = deposit_data.block_number;
   }

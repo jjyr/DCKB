@@ -1,43 +1,43 @@
-/* WCKB type script
- * WCKB is an extended UDT,
- * support transfer WCKB token while the native CKB is locked in NervosDAO,
- * WCKB owner can withdraw native CKB and interests from NervosDAO by destroy
- * corresponded WCKB.
+/* DCKB type script
+ * DCKB is an extended UDT,
+ * support transfer DCKB token while the native CKB is locked in NervosDAO,
+ * DCKB owner can withdraw native CKB and interests from NervosDAO by destroy
+ * corresponded DCKB.
  *
- * WCKB format:
+ * DCKB format:
  * data: tokens(16 bytes) | height(8 bytes)
  * > 16 bytes u128 number to store the TOKEN.
  * > 8 bytes u64 number to store the block number.
  *
  * Align block number:
  * > Align block number is a u64 number indicates to dep_headers,
- *   denoted by the first WCKB input's witness type args.
- * > All outputs WCKB cell's must aligned to the header,
+ *   denoted by the first DCKB input's witness type args.
+ * > All outputs DCKB cell's must aligned to the header,
  *   which means the header number should heigher than or at least equals to
- * WCKB cells. > Align means that we update the height of WCKB, and update the
+ * DCKB cells. > Align means that we update the height of DCKB, and update the
  * amount by apply NervosDAO formula.
  *
  * Verification:
  * This type script make sure the equation between inputs and outputs(all coins
  * are aligned):
- * 1. inputs WCKB >= outputs WCKB
- * 2. new WCKB == deposited NervosDAO
- * 3. all outputs WCKB's block number must align to aligned block number
+ * 1. inputs DCKB >= outputs DCKB
+ * 2. new DCKB == deposited NervosDAO
+ * 3. all outputs DCKB's block number must align to aligned block number
  *
- * Get WCKB:
+ * Get DCKB:
  * 1. send a NervosDAO deposition request
- * 2. put a output in the same tx to create corresponded WCKB
+ * 2. put a output in the same tx to create corresponded DCKB
  * 3. the height should set to 0
  *
- * Transfer WCKB:
- * 1. The first WCKB input must has highest block number compares to other
+ * Transfer DCKB:
+ * 1. The first DCKB input must has highest block number compares to other
  * inputs.
- * 2. Outputs WCKB must aligned to this number.
+ * 2. Outputs DCKB must aligned to this number.
  * 3. verify inputs amount is equals to outputs amount (after aligned).
  *
- * Withdraw WCKB:
+ * Withdraw DCKB:
  * 1. Perform NervosDAO withdraw phase 1.
- * 2. Prepare a WCKB input that has enough coins to cover the withdraw CKB
+ * 2. Prepare a DCKB input that has enough coins to cover the withdraw CKB
  * coins.
  * 3. Put a withdrawed output.
  *
@@ -119,10 +119,10 @@ int main() {
   }
 
   /* fetch inputs */
-  TokenInfo input_wckb_cells[MAX_SWAP_CELLS];
-  int input_wckb_cells_cnt;
-  ret = fetch_inputs(type_hash, NULL, NULL, NULL, NULL, &input_wckb_cells_cnt,
-                     input_wckb_cells);
+  TokenInfo input_dckb_cells[MAX_SWAP_CELLS];
+  int input_dckb_cells_cnt;
+  ret = fetch_inputs(type_hash, NULL, NULL, NULL, NULL, &input_dckb_cells_cnt,
+                     input_dckb_cells);
   printf("fetch inputs ret %d", ret);
   if (ret != CKB_SUCCESS) {
     return ret;
@@ -130,69 +130,69 @@ int main() {
   /* fetch outputs */
   int deposited_dao_cells_cnt = 0;
   SwapInfo deposited_dao_cells[MAX_SWAP_CELLS];
-  int output_new_wckb_cells_cnt = 0;
-  SwapInfo output_new_wckb_cells[MAX_SWAP_CELLS];
-  int output_wckb_cells_cnt = 0;
-  TokenInfo output_wckb_cells[MAX_SWAP_CELLS];
+  int output_new_dckb_cells_cnt = 0;
+  SwapInfo output_new_dckb_cells[MAX_SWAP_CELLS];
+  int output_dckb_cells_cnt = 0;
+  TokenInfo output_dckb_cells[MAX_SWAP_CELLS];
   ret = fetch_outputs(type_hash, &deposited_dao_cells_cnt, deposited_dao_cells,
-                      &output_new_wckb_cells_cnt, output_new_wckb_cells,
-                      &output_wckb_cells_cnt, output_wckb_cells);
+                      &output_new_dckb_cells_cnt, output_new_dckb_cells,
+                      &output_dckb_cells_cnt, output_dckb_cells);
   printf("fetch outputs ret %d", ret);
   if (ret != CKB_SUCCESS) {
     return ret;
   }
   printf("deposited_dao_cells_cnt %d output_uninit_cnt %d output_init_cnt %d",
-         deposited_dao_cells_cnt, output_new_wckb_cells_cnt,
-         output_wckb_cells_cnt);
+         deposited_dao_cells_cnt, output_new_dckb_cells_cnt,
+         output_dckb_cells_cnt);
   /* check equations
-   * 1. inputs WCKB >= outputs WCKB
-   * 2. new WCKB == deposited NervosDAO
+   * 1. inputs DCKB >= outputs DCKB
+   * 2. new DCKB == deposited NervosDAO
    */
   uint64_t calculated_capacity;
-  uint64_t total_input_wckb = 0;
-  for (int i = 0; i < input_wckb_cells_cnt; i++) {
+  uint64_t total_input_dckb = 0;
+  for (int i = 0; i < input_dckb_cells_cnt; i++) {
     ret = align_dao_compensation(i, CKB_SOURCE_INPUT, align_target_data,
-                                 input_wckb_cells[i].block_number,
-                                 input_wckb_cells[i].amount,
+                                 input_dckb_cells[i].block_number,
+                                 input_dckb_cells[i].amount,
                                  &calculated_capacity);
     if (ret != CKB_SUCCESS) {
       return ret;
     }
-    if (__builtin_uaddl_overflow(total_input_wckb, calculated_capacity,
-                                 &total_input_wckb)) {
+    if (__builtin_uaddl_overflow(total_input_dckb, calculated_capacity,
+                                 &total_input_dckb)) {
       return ERROR_OVERFLOW;
     }
   }
 
-  uint64_t total_output_wckb = 0;
-  for (int i = 0; i < output_wckb_cells_cnt; i++) {
-    if (output_wckb_cells[i].block_number != align_target_data.block_number) {
+  uint64_t total_output_dckb = 0;
+  for (int i = 0; i < output_dckb_cells_cnt; i++) {
+    if (output_dckb_cells[i].block_number != align_target_data.block_number) {
       return ERROR_OUTPUT_ALIGN;
     }
-    if (__builtin_uaddl_overflow(total_output_wckb, output_wckb_cells[i].amount,
-                                 &total_output_wckb)) {
+    if (__builtin_uaddl_overflow(total_output_dckb, output_dckb_cells[i].amount,
+                                 &total_output_dckb)) {
       return ERROR_OVERFLOW;
     }
   }
 
-  /* 1. inputs WCKB >= outputs WCKB */
-  if (total_input_wckb < total_output_wckb) {
+  /* 1. inputs DCKB >= outputs DCKB */
+  if (total_input_dckb < total_output_dckb) {
     printf(
-        "equation 1 total_input_wckb %ld "
-        "total_output_wckb %ld",
-        total_input_wckb, total_output_wckb);
-    return ERROR_INCORRECT_OUTPUT_WCKB;
+        "equation 1 total_input_dckb %ld "
+        "total_output_dckb %ld",
+        total_input_dckb, total_output_dckb);
+    return ERROR_INCORRECT_OUTPUT_DCKB;
   }
 
-  /* 2. new WCKB == deposited NervosDAO */
-  uint64_t total_output_new_wckb = 0;
-  for (int i = 0; i < output_new_wckb_cells_cnt; i++) {
-    uint64_t amount = (uint64_t)output_new_wckb_cells[i].amount;
-    if (amount != output_new_wckb_cells[i].amount) {
+  /* 2. new DCKB == deposited NervosDAO */
+  uint64_t total_output_new_dckb = 0;
+  for (int i = 0; i < output_new_dckb_cells_cnt; i++) {
+    uint64_t amount = (uint64_t)output_new_dckb_cells[i].amount;
+    if (amount != output_new_dckb_cells[i].amount) {
       return ERROR_OVERFLOW;
     }
-    if (__builtin_uaddl_overflow(total_output_new_wckb, amount,
-                                 &total_output_new_wckb)) {
+    if (__builtin_uaddl_overflow(total_output_new_dckb, amount,
+                                 &total_output_new_dckb)) {
       return ERROR_OVERFLOW;
     }
   }
@@ -208,10 +208,10 @@ int main() {
       return ERROR_OVERFLOW;
     }
   }
-  if (total_output_new_wckb != total_deposited_dao) {
-    printf("new wckb amount %ld, deposited_dao amount %ld",
-           (uint64_t)total_output_new_wckb, (uint64_t)total_deposited_dao);
-    return ERROR_INCORRECT_UNINIT_OUTPUT_WCKB;
+  if (total_output_new_dckb != total_deposited_dao) {
+    printf("new dckb amount %ld, deposited_dao amount %ld",
+           (uint64_t)total_output_new_dckb, (uint64_t)total_deposited_dao);
+    return ERROR_INCORRECT_UNINIT_OUTPUT_DCKB;
   }
 
   printf("done");

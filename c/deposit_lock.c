@@ -4,21 +4,21 @@
  * other usage will causes the cell be locked forever.
  *
  * Motivation:
- * This lock is designed to enforce users to destroy WCKB to get their native
- * CKB back, in withdraw phase1 a user must destroy X WCKB, which correspond to
- * the original deposited CKB. in withdraw phase2 a user must destroy Y WCKB
+ * This lock is designed to enforce users to destroy DCKB to get their native
+ * CKB back, in withdraw phase1 a user must destroy X DCKB, which correspond to
+ * the original deposited CKB. in withdraw phase2 a user must destroy Y DCKB
  * which correspond to the NervosDAO compensation. we also set a timeout after
  * the withdraw phase1, after W blocks, if the user do not perform phase2,
- * anyone can destroy Y WCKB to get unlock the NervosDAO cell.
+ * anyone can destroy Y DCKB to get unlock the NervosDAO cell.
  *
  * Unlock conditions:
  *
  * phase1:
- * 1. check `inputs WCKB - outputs WCKB = X`.
+ * 1. check `inputs DCKB - outputs DCKB = X`.
  * 2. has one output cell that has no type field as proxy lock cell.
  *
  * phase2:
- * 1. check `inputs WCKB - outputs WCKB = Y`.
+ * 1. check `inputs DCKB - outputs DCKB = Y`.
  * 2. has one input cell that has no type field, and created from the same
  * transaction of withdraw cell. or:
  * 2. the since field of inputs are set to a value which large or equals to
@@ -28,8 +28,8 @@
  * NervosDAO.
  *
  * Script args:
- * This script accept 32 bytes args: <wckb type hash>
- * <wckb type hash>: blake2b(Script(hash_type: Type, code_hash: <wckb type id>))
+ * This script accept 32 bytes args: <dckb type hash>
+ * <dckb type hash>: blake2b(Script(hash_type: Type, code_hash: <dckb type id>))
  *
  * Witness args:
  * This script expect a WitnessArgs and its lock:
@@ -37,8 +37,8 @@
  * phase2.
  */
 
-/* load wckb type hash from script.args */
-int load_wckb_type_hash(uint8_t wckb_type_hash[HASH_SIZE]) {
+/* load dckb type hash from script.args */
+int load_dckb_type_hash(uint8_t dckb_type_hash[HASH_SIZE]) {
   int ret;
   uint64_t len = 0;
   uint8_t script[MAX_SCRIPT_SIZE];
@@ -67,7 +67,7 @@ int load_wckb_type_hash(uint8_t wckb_type_hash[HASH_SIZE]) {
     return ERROR_ENCODING;
   }
 
-  memcpy(wckb_type_hash, raw_args_seg.ptr, HASH_SIZE);
+  memcpy(dckb_type_hash, raw_args_seg.ptr, HASH_SIZE);
   return CKB_SUCCESS;
 }
 
@@ -110,7 +110,7 @@ int load_proxy_lock_cell_index(uint8_t *index) {
 }
 
 /* check group inputs
- * calculate the withdraw phase and expected wckb destroy amount
+ * calculate the withdraw phase and expected dckb destroy amount
  */
 int check_unlock_cells(int *is_phase1, uint64_t *expected_destroy_amount) {
   int ret;
@@ -223,13 +223,13 @@ int check_unlock_cells(int *is_phase1, uint64_t *expected_destroy_amount) {
 
 int main() {
   uint8_t proxy_lock_cell_i = 0;
-  uint8_t wckb_type_hash[HASH_SIZE];
+  uint8_t dckb_type_hash[HASH_SIZE];
   /* TODO unlock via timeout */
   int ret = load_proxy_lock_cell_index(&proxy_lock_cell_i);
   if (ret != CKB_SUCCESS) {
     return ret;
   }
-  ret = load_wckb_type_hash(wckb_type_hash);
+  ret = load_dckb_type_hash(dckb_type_hash);
   if (ret != CKB_SUCCESS) {
     return ret;
   }
@@ -242,42 +242,42 @@ int main() {
   }
 
   /* fetch inputs */
-  int input_wckb_cells_cnt;
-  TokenInfo input_wckb_cells[MAX_SWAP_CELLS];
-  ret = fetch_inputs(wckb_type_hash, NULL, NULL, NULL, NULL,
-                     &input_wckb_cells_cnt, input_wckb_cells);
+  int input_dckb_cells_cnt;
+  TokenInfo input_dckb_cells[MAX_SWAP_CELLS];
+  ret = fetch_inputs(dckb_type_hash, NULL, NULL, NULL, NULL,
+                     &input_dckb_cells_cnt, input_dckb_cells);
   printf("fetch inputs ret %d", ret);
   if (ret != CKB_SUCCESS) {
     return ret;
   }
   /* fetch outputs */
-  int output_wckb_cells_cnt;
-  TokenInfo output_wckb_cells[MAX_SWAP_CELLS];
-  ret = fetch_outputs(wckb_type_hash, NULL, NULL, NULL, NULL,
-                      &output_wckb_cells_cnt, output_wckb_cells);
+  int output_dckb_cells_cnt;
+  TokenInfo output_dckb_cells[MAX_SWAP_CELLS];
+  ret = fetch_outputs(dckb_type_hash, NULL, NULL, NULL, NULL,
+                      &output_dckb_cells_cnt, output_dckb_cells);
   printf("fetch outputs ret %d", ret);
   if (ret != CKB_SUCCESS) {
     return ret;
   }
 
-  uint64_t total_input_wckb = 0;
-  for (int i = 0; i < input_wckb_cells_cnt; i++) {
-    if (__builtin_uaddl_overflow(total_input_wckb, input_wckb_cells[i].amount,
-                                 &total_input_wckb)) {
+  uint64_t total_input_dckb = 0;
+  for (int i = 0; i < input_dckb_cells_cnt; i++) {
+    if (__builtin_uaddl_overflow(total_input_dckb, input_dckb_cells[i].amount,
+                                 &total_input_dckb)) {
       return ERROR_OVERFLOW;
     }
   }
 
-  uint64_t total_output_wckb = 0;
-  for (int i = 0; i < output_wckb_cells_cnt; i++) {
-    if (__builtin_uaddl_overflow(total_output_wckb, output_wckb_cells[i].amount,
-                                 &total_output_wckb)) {
+  uint64_t total_output_dckb = 0;
+  for (int i = 0; i < output_dckb_cells_cnt; i++) {
+    if (__builtin_uaddl_overflow(total_output_dckb, output_dckb_cells[i].amount,
+                                 &total_output_dckb)) {
       return ERROR_OVERFLOW;
     }
   }
 
   uint64_t destroy_amount;
-  if (__builtin_usubl_overflow(total_input_wckb, total_output_wckb,
+  if (__builtin_usubl_overflow(total_input_dckb, total_output_dckb,
                                &destroy_amount)) {
     return ERROR_OVERFLOW;
   }

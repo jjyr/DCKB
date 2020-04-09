@@ -584,6 +584,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "dckb"
+version = "0.0.1"
+dependencies = [
+ "blake2b-rs",
+ "byteorder",
+ "ckb-crypto",
+ "ckb-dao-utils",
+ "ckb-error",
+ "ckb-hash",
+ "ckb-script",
+ "ckb-system-scripts 0.5.1",
+ "ckb-types",
+ "faster-hex 0.3.1",
+ "includedir",
+ "includedir_codegen",
+ "lazy_static",
+ "phf",
+ "rand 0.6.5",
+ "ripemd160",
+ "secp256k1",
+ "sha2",
+]
+
+[[package]]
 name = "debugid"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2453,30 +2477,6 @@ name = "wasi"
 version = "0.9.0+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cccddf32554fecc6acb585f82a32a72e28b48f8c4c1883ddfeeeaa96f7d8e519"
-
-[[package]]
-name = "wckb"
-version = "0.0.1"
-dependencies = [
- "blake2b-rs",
- "byteorder",
- "ckb-crypto",
- "ckb-dao-utils",
- "ckb-error",
- "ckb-hash",
- "ckb-script",
- "ckb-system-scripts 0.5.1",
- "ckb-types",
- "faster-hex 0.3.1",
- "includedir",
- "includedir_codegen",
- "lazy_static",
- "phf",
- "rand 0.6.5",
- "ripemd160",
- "secp256k1",
- "sha2",
-]
 
 [[package]]
 name = "winapi"

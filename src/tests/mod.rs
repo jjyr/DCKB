@@ -1,4 +1,4 @@
-mod wckb;
+mod dckb;
 
 use ckb_crypto::secp::Privkey;
 use ckb_script::DataLoader;
@@ -18,7 +18,7 @@ pub const SIGNATURE_SIZE: usize = 65;
 // errors
 
 lazy_static! {
-    pub static ref WCKB: Bytes = Bytes::from(&include_bytes!("../../specs/cells/wckb")[..]);
+    pub static ref DCKB: Bytes = Bytes::from(&include_bytes!("../../specs/cells/dckb")[..]);
     pub static ref ALWAYS_SUCCESS: Bytes =
         Bytes::from(&include_bytes!("../../specs/cells/always_success")[..]);
 }

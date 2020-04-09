@@ -1,12 +1,12 @@
 [package]
-name = "wckb"
+name = "dckb"
 version = "0.0.1"
 authors = ["Jiang Jinyang <jjyruby@gmail.com>"]
 edition = "2018"
 build = "build.rs"
 license = "MIT"
-description = "Wrapped CKB"
-repository = "https://github.com/jjyr/wckb"
+description = "DAO / Deposit CKB"
+repository = "https://github.com/jjyr/dckb"
 include = ["src/**/*", "Cargo.toml", "build.rs", "specs/cells/*"]
 
 [dependencies]

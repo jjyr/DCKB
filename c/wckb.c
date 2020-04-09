@@ -119,40 +119,41 @@ int main() {
   }
 
   /* fetch inputs */
-  TokenInfo input_wckb_infos[MAX_SWAP_CELLS];
-  int input_wckb_cnt;
-  ret = fetch_inputs(type_hash, NULL, NULL, NULL, NULL, &input_wckb_cnt,
-                     input_wckb_infos);
+  TokenInfo input_wckb_cells[MAX_SWAP_CELLS];
+  int input_wckb_cells_cnt;
+  ret = fetch_inputs(type_hash, NULL, NULL, NULL, NULL, &input_wckb_cells_cnt,
+                     input_wckb_cells);
   printf("fetch inputs ret %d", ret);
   if (ret != CKB_SUCCESS) {
     return ret;
   }
   /* fetch outputs */
-  int deposited_dao_cnt = 0;
-  SwapInfo deposited_dao[MAX_SWAP_CELLS];
+  int deposited_dao_cells_cnt = 0;
+  SwapInfo deposited_dao_cells[MAX_SWAP_CELLS];
   int output_new_wckb_cells_cnt = 0;
   SwapInfo output_new_wckb_cells[MAX_SWAP_CELLS];
   int output_wckb_cells_cnt = 0;
   TokenInfo output_wckb_cells[MAX_SWAP_CELLS];
-  ret = fetch_outputs(type_hash, &deposited_dao_cnt, deposited_dao,
+  ret = fetch_outputs(type_hash, &deposited_dao_cells_cnt, deposited_dao_cells,
                       &output_new_wckb_cells_cnt, output_new_wckb_cells,
                       &output_wckb_cells_cnt, output_wckb_cells);
   printf("fetch outputs ret %d", ret);
   if (ret != CKB_SUCCESS) {
     return ret;
   }
-  printf("deposited_dao_cnt %d output_uninit_cnt %d output_init_cnt %d",
-         deposited_dao_cnt, output_new_wckb_cells_cnt, output_wckb_cells_cnt);
+  printf("deposited_dao_cells_cnt %d output_uninit_cnt %d output_init_cnt %d",
+         deposited_dao_cells_cnt, output_new_wckb_cells_cnt,
+         output_wckb_cells_cnt);
   /* check equations
    * 1. inputs WCKB >= outputs WCKB
    * 2. new WCKB == deposited NervosDAO
    */
   uint64_t calculated_capacity;
   uint64_t total_input_wckb = 0;
-  for (int i = 0; i < input_wckb_cnt; i++) {
+  for (int i = 0; i < input_wckb_cells_cnt; i++) {
     ret = align_dao_compensation(i, CKB_SOURCE_INPUT, align_target_data,
-                                 input_wckb_infos[i].block_number,
-                                 input_wckb_infos[i].amount,
+                                 input_wckb_cells[i].block_number,
+                                 input_wckb_cells[i].amount,
                                  &calculated_capacity);
     if (ret != CKB_SUCCESS) {
       return ret;
@@ -170,10 +171,9 @@ int main() {
 
   /* 1. inputs WCKB >= outputs WCKB */
   if (total_input_wckb < total_output_wckb) {
-    printf(
-        "equation 1 total_input_wckb %ld "
-        "total_output_wckb %ld",
-        total_input_wckb, total_output_wckb);
+    printf("equation 1 total_input_wckb %ld "
+           "total_output_wckb %ld",
+           total_input_wckb, total_output_wckb);
     return ERROR_INCORRECT_OUTPUT_WCKB;
   }
 
@@ -184,8 +184,8 @@ int main() {
   }
 
   uint64_t total_deposited_dao = 0;
-  for (int i = 0; i < deposited_dao_cnt; i++) {
-    total_deposited_dao += (uint64_t)deposited_dao[i].amount;
+  for (int i = 0; i < deposited_dao_cells_cnt; i++) {
+    total_deposited_dao += (uint64_t)deposited_dao_cells[i].amount;
   }
   if (total_output_new_wckb != total_deposited_dao) {
     printf("new wckb amount %ld, deposited_dao amount %ld",

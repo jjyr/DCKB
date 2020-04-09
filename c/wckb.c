@@ -158,7 +158,10 @@ int main() {
     if (ret != CKB_SUCCESS) {
       return ret;
     }
-    total_input_wckb += calculated_capacity;
+    if (__builtin_uaddl_overflow(total_input_wckb, calculated_capacity,
+                                 &total_input_wckb)) {
+      return ERROR_OVERFLOW;
+    }
   }
 
   uint64_t total_output_wckb = 0;
@@ -166,26 +169,44 @@ int main() {
     if (output_wckb_cells[i].block_number != align_target_data.block_number) {
       return ERROR_OUTPUT_ALIGN;
     }
-    total_output_wckb += output_wckb_cells[i].amount;
+    if (__builtin_uaddl_overflow(total_output_wckb, output_wckb_cells[i].amount,
+                                 &total_output_wckb)) {
+      return ERROR_OVERFLOW;
+    }
   }
 
   /* 1. inputs WCKB >= outputs WCKB */
   if (total_input_wckb < total_output_wckb) {
-    printf("equation 1 total_input_wckb %ld "
-           "total_output_wckb %ld",
-           total_input_wckb, total_output_wckb);
+    printf(
+        "equation 1 total_input_wckb %ld "
+        "total_output_wckb %ld",
+        total_input_wckb, total_output_wckb);
     return ERROR_INCORRECT_OUTPUT_WCKB;
   }
 
   /* 2. new WCKB == deposited NervosDAO */
   uint64_t total_output_new_wckb = 0;
   for (int i = 0; i < output_new_wckb_cells_cnt; i++) {
-    total_output_new_wckb += (uint64_t)output_new_wckb_cells[i].amount;
+    uint64_t amount = (uint64_t)output_new_wckb_cells[i].amount;
+    if (amount != output_new_wckb_cells[i].amount) {
+      return ERROR_OVERFLOW;
+    }
+    if (__builtin_uaddl_overflow(total_output_new_wckb, amount,
+                                 &total_output_new_wckb)) {
+      return ERROR_OVERFLOW;
+    }
   }
 
   uint64_t total_deposited_dao = 0;
   for (int i = 0; i < deposited_dao_cells_cnt; i++) {
-    total_deposited_dao += (uint64_t)deposited_dao_cells[i].amount;
+    uint64_t amount = (uint64_t)deposited_dao_cells[i].amount;
+    if (amount != deposited_dao_cells[i].amount) {
+      return ERROR_OVERFLOW;
+    }
+    if (__builtin_uaddl_overflow(total_deposited_dao, amount,
+                                 &total_deposited_dao)) {
+      return ERROR_OVERFLOW;
+    }
   }
   if (total_output_new_wckb != total_deposited_dao) {
     printf("new wckb amount %ld, deposited_dao amount %ld",

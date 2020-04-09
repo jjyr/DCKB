@@ -172,7 +172,10 @@ int check_unlock_cells(int *is_phase1, uint64_t *expected_destroy_amount) {
       return ERROR_LOAD_CAPACITY;
     }
     if (cell_is_phase1) {
-      *expected_destroy_amount += original_capacity;
+      if (__builtin_uaddl_overflow(*expected_destroy_amount, original_capacity,
+                                   expected_destroy_amount)) {
+        return ERROR_OVERFLOW;
+      }
     } else {
       /* load DAO deposit header */
       size_t header_index;
@@ -207,7 +210,11 @@ int check_unlock_cells(int *is_phase1, uint64_t *expected_destroy_amount) {
                                    &compensation_capacity)) {
         return ERROR_OVERFLOW;
       }
-      *expected_destroy_amount += compensation_capacity;
+      if (__builtin_uaddl_overflow(*expected_destroy_amount,
+                                   compensation_capacity,
+                                   expected_destroy_amount)) {
+        return ERROR_OVERFLOW;
+      }
     }
     i++;
   }
@@ -232,6 +239,50 @@ int main() {
   ret = check_unlock_cells(&is_phase1, &expected_destroy_amount);
   if (ret != CKB_SUCCESS) {
     return ret;
+  }
+
+  /* fetch inputs */
+  int input_wckb_cells_cnt;
+  TokenInfo input_wckb_cells[MAX_SWAP_CELLS];
+  ret = fetch_inputs(wckb_type_hash, NULL, NULL, NULL, NULL,
+                     &input_wckb_cells_cnt, input_wckb_cells);
+  printf("fetch inputs ret %d", ret);
+  if (ret != CKB_SUCCESS) {
+    return ret;
+  }
+  /* fetch outputs */
+  int output_wckb_cells_cnt;
+  TokenInfo output_wckb_cells[MAX_SWAP_CELLS];
+  ret = fetch_outputs(wckb_type_hash, NULL, NULL, NULL, NULL,
+                      &output_wckb_cells_cnt, output_wckb_cells);
+  printf("fetch outputs ret %d", ret);
+  if (ret != CKB_SUCCESS) {
+    return ret;
+  }
+
+  uint64_t total_input_wckb = 0;
+  for (int i = 0; i < input_wckb_cells_cnt; i++) {
+    if (__builtin_uaddl_overflow(total_input_wckb, input_wckb_cells[i].amount,
+                                 &total_input_wckb)) {
+      return ERROR_OVERFLOW;
+    }
+  }
+
+  uint64_t total_output_wckb = 0;
+  for (int i = 0; i < output_wckb_cells_cnt; i++) {
+    if (__builtin_uaddl_overflow(total_output_wckb, output_wckb_cells[i].amount,
+                                 &total_output_wckb)) {
+      return ERROR_OVERFLOW;
+    }
+  }
+
+  uint64_t destroy_amount;
+  if (__builtin_usubl_overflow(total_input_wckb, total_output_wckb,
+                               &destroy_amount)) {
+    return ERROR_OVERFLOW;
+  }
+  if (destroy_amount != expected_destroy_amount) {
+    return ERROR_ENCODING;
   }
 
   return CKB_SUCCESS;

@@ -44,6 +44,9 @@ typedef unsigned __int128 uint128_t;
 #define SINCE_VALUE_MASK 0x00ffffffffffffff
 #define SINCE_EPOCH_FRACTION_FLAG 0b00100000
 
+#define MAX_SCRIPT_SIZE 32768
+#define MAX_HEADER_SIZE 32768
+
 /* Contract related */
 #define MAX_SWAP_CELLS 256
 #define CKB_LEN 8
@@ -55,6 +58,7 @@ typedef unsigned __int128 uint128_t;
 #include "ckb_syscalls.h"
 #include "dao_utils.h"
 #include "protocol.h"
+#include "stdio.h"
 
 typedef struct {
   uint128_t amount;

@@ -49,9 +49,6 @@
 #include "protocol.h"
 #include "stdio.h"
 
-#define SCRIPT_SIZE 32768
-#define MAX_HEADER_SIZE 32768
-
 int load_align_target_header(uint64_t *index) {
   int ret;
   uint64_t len = 0;

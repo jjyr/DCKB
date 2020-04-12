@@ -3,6 +3,7 @@
  */
 
 #include "protocol.h"
+#include "stdio.h"
 
 #define ERROR_UNKNOWN -1
 #define ERROR_WRONG_NUMBER_OF_ARGUMENTS -2

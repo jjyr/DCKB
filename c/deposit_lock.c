@@ -37,6 +37,8 @@
  * phase2.
  */
 
+#include "common.h"
+
 /* load dckb type hash from script.args */
 int load_dckb_type_hash(uint8_t dckb_type_hash[HASH_SIZE]) {
   int ret;
@@ -144,7 +146,6 @@ int check_unlock_cells(int *is_phase1, uint64_t *expected_destroy_amount) {
       return ERROR_ENCODING;
     }
     /* check type hash */
-    uint64_t original_capacity;
     len = HASH_SIZE;
     ret = ckb_checked_load_cell_by_field(type_hash, &len, 0, i,
                                          CKB_SOURCE_GROUP_INPUT,
@@ -184,7 +185,7 @@ int check_unlock_cells(int *is_phase1, uint64_t *expected_destroy_amount) {
         return ret;
       }
       dao_header_data_t deposit_data;
-      ret = load_dao_header_data(header_index, CKB_SOURCE_DEP_HEADER,
+      ret = load_dao_header_data(header_index, CKB_SOURCE_HEADER_DEP,
                                  &deposit_data);
       if (ret != CKB_SUCCESS) {
         return ret;

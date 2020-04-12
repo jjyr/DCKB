@@ -8,36 +8,36 @@ Defines commonly used high level functions and constants.
 typedef unsigned __int128 uint128_t;
 
 /* Errors */
-/* secp256k1 unlock errors */
+/* common errors */
 #define ERROR_ARGUMENTS_LEN -1
 #define ERROR_ENCODING -2
 #define ERROR_SYSCALL -3
-#define ERROR_LOAD_HEADER -4
-#define ERROR_SECP_RECOVER_PUBKEY -11
-#define ERROR_SECP_VERIFICATION -12
-#define ERROR_SECP_PARSE_PUBKEY -13
-#define ERROR_SECP_PARSE_SIGNATURE -14
-#define ERROR_SECP_SERIALIZE_PUBKEY -15
-#define ERROR_SCRIPT_TOO_LONG -21
-#define ERROR_WITNESS_SIZE -22
-#define ERROR_INCORRECT_SINCE_FLAGS -23
-#define ERROR_INCORRECT_SINCE_VALUE -24
-#define ERROR_PUBKEY_BLAKE160_HASH -31
-/* anyone can pay errors */
-#define ERROR_OVERFLOW -41
-#define ERROR_INCORRECT_OUTPUT_DCKB -42
-#define ERROR_TOO_MANY_SWAPS -43
-#define ERROR_INCORRECT_UNINIT_OUTPUT_DCKB -44
-#define ERROR_ALIGN -45
-#define ERROR_OUTPUT_ALIGN -46
-#define ERROR_LOAD_SCRIPT -50
-#define ERROR_LOAD_TYPE_ID -51
-#define ERROR_LOAD_WITNESS_ARGS -52
-#define ERROR_LOAD_ALIGN_INDEX -53
-#define ERROR_LOAD_TYPE_HASH -54
-#define ERROR_LOAD_OCCUPIED_CAPACITY -55
-#define ERROR_LOAD_CAPACITY -56
-#define ERROR_LOAD_DCKB_DATA -57
+#define ERROR_OVERFLOW -4
+#define ERROR_LOAD_HEADER -10
+#define ERROR_LOAD_SCRIPT -11
+#define ERROR_LOAD_TYPE_ID -12
+#define ERROR_LOAD_WITNESS_ARGS -13
+#define ERROR_LOAD_ALIGN_INDEX -14
+#define ERROR_LOAD_TYPE_HASH -15
+#define ERROR_LOAD_OCCUPIED_CAPACITY -16
+#define ERROR_LOAD_CAPACITY -17
+#define ERROR_LOAD_DCKB_DATA -18
+#define ERROR_LOAD_HEADER_INDEX -19
+
+/* dckb errors */
+#define ERROR_DCKB_INCORRECT_OUTPUT -30
+#define ERROR_DCKB_TOO_MANY_SWAPS -31
+#define ERROR_DCKB_INCORRECT_OUTPUT_UNINIT_TOKEN -32
+#define ERROR_DCKB_ALIGN -33
+#define ERROR_DCKB_OUTPUT_ALIGN -34
+
+/* unlock_deposit errors */
+#define ERROR_DL_CONFLICT_WITHDRAW_PHASE -40
+#define ERROR_DL_CONFLICT_DAO_TYPE_HASH -41
+#define ERROR_DL_NO_PROXY_CELL_INDEX -42
+#define ERROR_DL_WRONG_DESTROY_AMOUNT -43
+#define ERROR_DL_INVALID_LOCK_PROXY -44
+#define ERROR_DL_INVALID_SINCE -45
 
 /* since */
 #define SINCE_VALUE_BITS 56
@@ -50,9 +50,10 @@ typedef unsigned __int128 uint128_t;
 /* Contract related */
 #define MAX_SWAP_CELLS 256
 #define CKB_LEN 8
+#define SINCE_LEN 8
+#define BLOCK_NUM_LEN 8
 #define UDT_LEN 16
 #define HASH_SIZE 32
-#define BLOCK_NUM_LEN 8
 #define DAO_OCCUPIED_CAPACITY 10200000000
 
 #include "ckb_syscalls.h"
@@ -216,7 +217,7 @@ int fetch_outputs(unsigned char *dckb_type_hash, int *deposited_dao_cnt,
       }
       /* record deposited dao amount */
       if (*deposited_dao_cnt >= MAX_SWAP_CELLS) {
-        return ERROR_TOO_MANY_SWAPS;
+        return ERROR_DCKB_TOO_MANY_SWAPS;
       }
       int new_i = *deposited_dao_cnt;
       *deposited_dao_cnt += 1;
@@ -230,11 +231,12 @@ int fetch_outputs(unsigned char *dckb_type_hash, int *deposited_dao_cnt,
       }
       amount = *(uint128_t *)buf;
       block_number = *(uint64_t *)(buf + UDT_LEN);
+      printf("fetch output -> dckb block_number %ld", block_number);
       if (block_number == 0) {
         if (!new_dckb_cell_cnt || !new_dckb_cell) goto next;
         /* new dckb */
         if (*new_dckb_cell_cnt >= MAX_SWAP_CELLS) {
-          return ERROR_TOO_MANY_SWAPS;
+          return ERROR_DCKB_TOO_MANY_SWAPS;
         }
         int new_i = *new_dckb_cell_cnt;
         *new_dckb_cell_cnt += 1;
@@ -243,7 +245,7 @@ int fetch_outputs(unsigned char *dckb_type_hash, int *deposited_dao_cnt,
         if (!dckb_cell_cnt || !dckb_cell) goto next;
         /* dckb */
         if (*dckb_cell_cnt >= MAX_SWAP_CELLS) {
-          return ERROR_TOO_MANY_SWAPS;
+          return ERROR_DCKB_TOO_MANY_SWAPS;
         }
         int new_i = *dckb_cell_cnt;
         *dckb_cell_cnt += 1;
@@ -270,7 +272,7 @@ int align_dao_compensation(size_t i, size_t source,
   if (align_target_data.block_number < deposited_block_number) {
     printf("align %ld deposit block %ld", align_target_data.block_number,
            deposited_block_number);
-    return ERROR_ALIGN;
+    return ERROR_DCKB_ALIGN;
   }
   dao_header_data_t deposit_data;
   int ret = load_dao_header_data(i, source, &deposit_data);

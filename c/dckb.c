@@ -164,7 +164,8 @@ int main() {
   uint64_t total_output_dckb = 0;
   for (int i = 0; i < output_dckb_cells_cnt; i++) {
     if (output_dckb_cells[i].block_number != align_target_data.block_number) {
-      return ERROR_OUTPUT_ALIGN;
+      printf("output align to %ld, expected %ld", output_dckb_cells[i].block_number, align_target_data.block_number);
+      return ERROR_DCKB_OUTPUT_ALIGN;
     }
     if (__builtin_uaddl_overflow(total_output_dckb, output_dckb_cells[i].amount,
                                  &total_output_dckb)) {
@@ -178,7 +179,7 @@ int main() {
         "equation 1 total_input_dckb %ld "
         "total_output_dckb %ld",
         total_input_dckb, total_output_dckb);
-    return ERROR_INCORRECT_OUTPUT_DCKB;
+    return ERROR_DCKB_INCORRECT_OUTPUT;
   }
 
   /* 2. new DCKB == deposited NervosDAO */
@@ -208,7 +209,7 @@ int main() {
   if (total_output_new_dckb != total_deposited_dao) {
     printf("new dckb amount %ld, deposited_dao amount %ld",
            (uint64_t)total_output_new_dckb, (uint64_t)total_deposited_dao);
-    return ERROR_INCORRECT_UNINIT_OUTPUT_DCKB;
+    return ERROR_DCKB_INCORRECT_OUTPUT_UNINIT_TOKEN;
   }
 
   printf("done");

@@ -22,7 +22,7 @@
  * 2. has one input cell that has no type field, and created from the same
  * transaction of withdraw cell. or:
  * 2. the since field of inputs are set to a value which large or equals to
- * relatively `W` blocks.
+ * relatively `W` epochs.
  *
  * HINT: we use a proxy lock cell as ownership proof to break the restriction of
  * NervosDAO.
@@ -37,7 +37,11 @@
  * phase2.
  */
 
+#include "ckb_utils.h"
 #include "common.h"
+
+/* since relative time 4 epochs */
+#define PHASE2_TIMEOUT_SINCE 0xa000010000000004
 
 /* load dckb type hash from script.args */
 int load_dckb_type_hash(uint8_t dckb_type_hash[HASH_SIZE]) {
@@ -81,6 +85,9 @@ int load_proxy_lock_cell_index(uint8_t *index) {
 
   len = MAX_WITNESS_SIZE;
   ret = ckb_load_witness(witness, &len, 0, 0, CKB_SOURCE_GROUP_INPUT);
+  if (ret == CKB_ITEM_MISSING) {
+    return ERROR_DL_NO_PROXY_CELL_INDEX;
+  }
   if (ret != CKB_SUCCESS) {
     return ret;
   }
@@ -99,16 +106,29 @@ int load_proxy_lock_cell_index(uint8_t *index) {
   mol_seg_t lock_seg = MolReader_WitnessArgs_get_lock(&witness_seg);
 
   if (MolReader_BytesOpt_is_none(&lock_seg)) {
-    return ERROR_ENCODING;
+    return ERROR_DL_NO_PROXY_CELL_INDEX;
   }
 
   mol_seg_t lock_bytes_seg = MolReader_Bytes_raw_bytes(&lock_seg);
   if (lock_bytes_seg.size != 1) {
-    return ERROR_ENCODING;
+    return ERROR_DL_NO_PROXY_CELL_INDEX;
   }
 
   *index = *(uint8_t *)lock_bytes_seg.ptr;
   return CKB_SUCCESS;
+}
+
+/* check validity of proxy lock cell
+ */
+int check_proxy_lock_cell(uint64_t i, uint64_t source) {
+  uint64_t len = 0;
+  int ret = ckb_checked_load_cell_by_field(NULL, &len, 0, i, source,
+                                           CKB_CELL_FIELD_TYPE_HASH);
+  /* proxy lock cell must has no type field */
+  if (ret == CKB_ITEM_MISSING) {
+    return CKB_SUCCESS;
+  }
+  return ERROR_DL_INVALID_LOCK_PROXY;
 }
 
 /* check group inputs
@@ -136,21 +156,23 @@ int check_unlock_cells(int *is_phase1, uint64_t *expected_destroy_amount) {
       return ERROR_ENCODING;
     }
     /* check withdraw phase */
-    if (is_phase1 == NULL) {
+    if (i == 0) {
       /* first cell, initialize is_phase1 */
       *is_phase1 = is_dao_withdraw1_cell(cell_data, len);
     }
     int cell_is_phase1 = is_dao_withdraw1_cell(cell_data, len);
+    printf("i=%d withdraw phase: %d cell_is_phase1=%d", i, *is_phase1,
+           cell_is_phase1);
     /* inputs must be same withdraw phase */
     if (*is_phase1 != cell_is_phase1) {
-      return ERROR_ENCODING;
+      return ERROR_DL_CONFLICT_WITHDRAW_PHASE;
     }
     /* check type hash */
     len = HASH_SIZE;
     ret = ckb_checked_load_cell_by_field(type_hash, &len, 0, i,
                                          CKB_SOURCE_GROUP_INPUT,
                                          CKB_CELL_FIELD_TYPE_HASH);
-    if (ret != CKB_SUCCESS || len != BLOCK_NUM_LEN) {
+    if (ret != CKB_SUCCESS || len != HASH_SIZE) {
       return ERROR_ENCODING;
     }
     if (i == 0) {
@@ -160,7 +182,7 @@ int check_unlock_cells(int *is_phase1, uint64_t *expected_destroy_amount) {
       /* inputs must have same type hash */
       ret = memcmp(nervos_dao_type_hash, type_hash, HASH_SIZE);
       if (ret != 0) {
-        return ERROR_ENCODING;
+        return ERROR_DL_CONFLICT_DAO_TYPE_HASH;
       }
     }
     /* calculate expected amount */
@@ -172,29 +194,31 @@ int check_unlock_cells(int *is_phase1, uint64_t *expected_destroy_amount) {
     if (ret != CKB_SUCCESS || len != CKB_LEN) {
       return ERROR_LOAD_CAPACITY;
     }
-    if (cell_is_phase1) {
+    if (!cell_is_phase1) {
+      /* the input cell is in phase1 withdraw */
       if (__builtin_uaddl_overflow(*expected_destroy_amount, original_capacity,
                                    expected_destroy_amount)) {
         return ERROR_OVERFLOW;
       }
     } else {
+      /* the input cell is in phase2 withdraw */
       /* load DAO deposit header */
       size_t header_index;
       ret = extract_deposit_header_index(i, &header_index);
       if (ret != CKB_SUCCESS) {
-        return ret;
+        return ERROR_LOAD_HEADER_INDEX;
       }
       dao_header_data_t deposit_data;
       ret = load_dao_header_data(header_index, CKB_SOURCE_HEADER_DEP,
                                  &deposit_data);
       if (ret != CKB_SUCCESS) {
-        return ret;
+        return ERROR_LOAD_HEADER;
       }
       /* load DAO withdraw header */
       dao_header_data_t target_data;
       ret = load_dao_header_data(i, CKB_SOURCE_GROUP_INPUT, &target_data);
       if (ret != CKB_SUCCESS) {
-        return ret;
+        return ERROR_LOAD_HEADER;
       }
       /* calculate withdraw amount */
       uint64_t deposited_block_number = *(uint64_t *)cell_data;
@@ -222,24 +246,94 @@ int check_unlock_cells(int *is_phase1, uint64_t *expected_destroy_amount) {
   return CKB_SUCCESS;
 }
 
-int main() {
-  uint8_t proxy_lock_cell_i = 0;
-  uint8_t dckb_type_hash[HASH_SIZE];
-  /* TODO unlock via timeout */
-  int ret = load_proxy_lock_cell_index(&proxy_lock_cell_i);
-  if (ret != CKB_SUCCESS) {
-    return ret;
+/* check inputs since
+ * to unlock via timeout, all inputs' since value should greater than or equals
+ * to PHASE2_TIMEOUT_SINCE
+ */
+int check_inputs_phase2_timeout() {
+  int ret;
+  uint64_t len;
+  int i = 0;
+  while (1) {
+    uint64_t since;
+    len = SINCE_LEN;
+    ret =
+        ckb_load_input_by_field((uint8_t *)&since, &len, 0, i,
+                                CKB_SOURCE_GROUP_INPUT, CKB_INPUT_FIELD_SINCE);
+    if (ret == CKB_INDEX_OUT_OF_BOUND) {
+      break;
+    }
+    if (ret != CKB_SUCCESS || len != SINCE_LEN) {
+      return ERROR_ENCODING;
+    }
+    int comparable = 0;
+    ret = ckb_since_cmp(since, PHASE2_TIMEOUT_SINCE, &comparable);
+    if (!comparable || ret < 0) {
+      return ERROR_DL_INVALID_SINCE;
+    }
+    i++;
   }
-  ret = load_dckb_type_hash(dckb_type_hash);
+  return CKB_SUCCESS;
+}
+
+int main() {
+  uint8_t dckb_type_hash[HASH_SIZE];
+  int ret = load_dckb_type_hash(dckb_type_hash);
+  printf("load dckb type hash %d", ret);
   if (ret != CKB_SUCCESS) {
     return ret;
   }
 
-  int is_phase1;
+  int is_phase1_cell;
   uint64_t expected_destroy_amount;
-  ret = check_unlock_cells(&is_phase1, &expected_destroy_amount);
+  ret = check_unlock_cells(&is_phase1_cell, &expected_destroy_amount);
   if (ret != CKB_SUCCESS) {
     return ret;
+  }
+
+  /* check unlock condition */
+  if (!is_phase1_cell) {
+    /* we are performing DAO withdraw phase1.
+     * anyone destroy enough DCKB can unlock cells,
+     * outputs should include a lock proxy cell to prove the ownership in DAO
+     * withdraw phase2.
+     */
+    uint8_t proxy_lock_cell_i = 0;
+    ret = load_proxy_lock_cell_index(&proxy_lock_cell_i);
+    if (ret != CKB_SUCCESS) {
+      return ret;
+    }
+    ret = check_proxy_lock_cell(proxy_lock_cell_i, CKB_SOURCE_OUTPUT);
+    if (ret != CKB_SUCCESS) {
+      return ret;
+    }
+  } else {
+    /* input cell is phase1 withdraw cell, implies we are performing DAO
+     * withdraw phase2.
+     * 1. inputs should include a lock proxy cell, which generated from same
+     * transaction of DAO cells. or
+     * 2. inputs have `since` field.
+     *   a. the `since` flags is set to relative epochs
+     *   b. the `since` value is greater than or equals to PHASE2_TIMEOUT_SINCE
+     */
+    uint8_t proxy_lock_cell_i = 0;
+    ret = load_proxy_lock_cell_index(&proxy_lock_cell_i);
+    if (ret != CKB_SUCCESS && ret != ERROR_DL_NO_PROXY_CELL_INDEX) {
+      return ret;
+    }
+    if (ret == CKB_SUCCESS) {
+      /* unlock via lock proxy */
+      ret = check_proxy_lock_cell(proxy_lock_cell_i, CKB_SOURCE_OUTPUT);
+      if (ret != CKB_SUCCESS) {
+        return ret;
+      }
+    } else {
+      /* unlock via phase2 withdraw timeout */
+      ret = check_inputs_phase2_timeout();
+      if (ret != CKB_SUCCESS) {
+        return ret;
+      }
+    }
   }
 
   /* fetch inputs */
@@ -276,15 +370,20 @@ int main() {
       return ERROR_OVERFLOW;
     }
   }
+  printf("total output dckb %ld", total_output_dckb);
 
   uint64_t destroy_amount;
   if (__builtin_usubl_overflow(total_input_dckb, total_output_dckb,
                                &destroy_amount)) {
     return ERROR_OVERFLOW;
   }
+  printf("destroy amount %ld, expect %ld", destroy_amount,
+         expected_destroy_amount);
+  /* check destroy dckb */
   if (destroy_amount != expected_destroy_amount) {
-    return ERROR_ENCODING;
+    return ERROR_DL_WRONG_DESTROY_AMOUNT;
   }
 
+  printf("deposit lock success");
   return CKB_SUCCESS;
 }

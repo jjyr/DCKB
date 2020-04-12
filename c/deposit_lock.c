@@ -37,6 +37,7 @@
  * phase2.
  */
 
+#include "stddef.h"
 #include "ckb_utils.h"
 #include "common.h"
 
@@ -124,11 +125,12 @@ int check_proxy_lock_cell(uint64_t i, uint64_t source) {
   uint64_t len = 0;
   int ret = ckb_checked_load_cell_by_field(NULL, &len, 0, i, source,
                                            CKB_CELL_FIELD_TYPE_HASH);
+  printf("check proxy lock cell i %ld source %ld ret %d len %ld", i, source, ret, len);
   /* proxy lock cell must has no type field */
   if (ret == CKB_ITEM_MISSING) {
     return CKB_SUCCESS;
   }
-  return ERROR_DL_INVALID_LOCK_PROXY;
+  return ERROR_DL_INVALID_PROXY_LOCK;
 }
 
 /* check group inputs
@@ -246,11 +248,82 @@ int check_unlock_cells(int *is_phase1, uint64_t *expected_destroy_amount) {
   return CKB_SUCCESS;
 }
 
-/* check inputs since
- * to unlock via timeout, all inputs' since value should greater than or equals
+int load_out_point_seg(uint64_t i, uint8_t buf[OUT_POINT_SIZE],
+                       mol_seg_t *out_point_seg) {
+  uint64_t len = OUT_POINT_SIZE;
+  int ret = ckb_load_input_by_field(buf, &len, 0, i, CKB_SOURCE_GROUP_INPUT,
+                                CKB_INPUT_FIELD_OUT_POINT);
+  if (ret != CKB_SUCCESS) {
+    return ret;
+  }
+  if (len != OUT_POINT_SIZE) {
+    return ERROR_ENCODING;
+  }
+
+  out_point_seg->ptr = (uint8_t *)buf;
+  out_point_seg->size = len;
+
+  if (MolReader_OutPoint_verify(out_point_seg, false) != MOL_OK) {
+    return ERROR_ENCODING;
+  }
+
+  return CKB_SUCCESS;
+}
+
+/* unlock via proxy cell
+ * 1. proxy cell should be validity
+ * 2. all inputs is from the same tx as the proxy cell froms
+ */
+int check_phase2_unlock_via_proxy_cell(uint64_t proxy_lock_cell_i) {
+  /* check proxy lock cell */
+  int ret = check_proxy_lock_cell(proxy_lock_cell_i, CKB_SOURCE_INPUT);
+  if (ret != CKB_SUCCESS) {
+    return ret;
+  }
+  /* load proxy lock cell outpoint */
+  uint8_t proxy_lock_cell_tx_hash[HASH_SIZE];
+  uint8_t buf[OUT_POINT_SIZE];
+  mol_seg_t out_point_seg;
+  ret = load_out_point_seg(proxy_lock_cell_i, buf, &out_point_seg);
+  if (ret != CKB_SUCCESS) {
+    return ret;
+  }
+  mol_seg_t tx_hash_seg = MolReader_OutPoint_get_tx_hash(&out_point_seg);
+  if (tx_hash_seg.size != HASH_SIZE) {
+    return ERROR_ENCODING;
+  }
+  memcpy(proxy_lock_cell_tx_hash, tx_hash_seg.ptr, HASH_SIZE);
+
+  /* check inputs outpoints */
+  int i = 0;
+  while (1) {
+    ret = load_out_point_seg(i, buf, &out_point_seg);
+    if (ret == CKB_INDEX_OUT_OF_BOUND) {
+      break;
+    }
+    if (ret != CKB_SUCCESS) {
+      return ret;
+    }
+
+    /* Load tx hash */
+    tx_hash_seg = MolReader_OutPoint_get_tx_hash(&out_point_seg);
+    if (tx_hash_seg.size != HASH_SIZE) {
+      return ERROR_ENCODING;
+    }
+    ret = memcmp(proxy_lock_cell_tx_hash, tx_hash_seg.ptr, HASH_SIZE);
+    if(ret != 0) {
+      return ERROR_DL_INVALID_PROXY_LOCK_TX_HASH;
+    }
+
+    i++;
+  }
+  return CKB_SUCCESS;
+}
+
+/* to unlock via timeout, all inputs' since value should greater than or equals
  * to PHASE2_TIMEOUT_SINCE
  */
-int check_inputs_phase2_timeout() {
+int check_phase2_unlock_via_timeout() {
   int ret;
   uint64_t len;
   int i = 0;
@@ -323,13 +396,13 @@ int main() {
     }
     if (ret == CKB_SUCCESS) {
       /* unlock via lock proxy */
-      ret = check_proxy_lock_cell(proxy_lock_cell_i, CKB_SOURCE_OUTPUT);
+      ret = check_phase2_unlock_via_proxy_cell(proxy_lock_cell_i);
       if (ret != CKB_SUCCESS) {
         return ret;
       }
     } else {
       /* unlock via phase2 withdraw timeout */
-      ret = check_inputs_phase2_timeout();
+      ret = check_phase2_unlock_via_timeout();
       if (ret != CKB_SUCCESS) {
         return ret;
       }
@@ -381,7 +454,7 @@ int main() {
          expected_destroy_amount);
   /* check destroy dckb */
   if (destroy_amount != expected_destroy_amount) {
-    return ERROR_DL_WRONG_DESTROY_AMOUNT;
+    return ERROR_DL_INCORRECT_DESTROY_AMOUNT;
   }
 
   printf("deposit lock success");

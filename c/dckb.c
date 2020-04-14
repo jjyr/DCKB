@@ -164,7 +164,8 @@ int main() {
   uint64_t total_output_dckb = 0;
   for (int i = 0; i < output_dckb_cells_cnt; i++) {
     if (output_dckb_cells[i].block_number != align_target_data.block_number) {
-      printf("output align to %ld, expected %ld", output_dckb_cells[i].block_number, align_target_data.block_number);
+      printf("output align to %ld, expected %ld",
+             output_dckb_cells[i].block_number, align_target_data.block_number);
       return ERROR_DCKB_OUTPUT_ALIGN;
     }
     if (__builtin_uaddl_overflow(total_output_dckb, output_dckb_cells[i].amount,

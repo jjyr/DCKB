@@ -23,6 +23,7 @@ typedef unsigned __int128 uint128_t;
 #define ERROR_LOAD_CAPACITY -17
 #define ERROR_LOAD_DCKB_DATA -18
 #define ERROR_LOAD_HEADER_INDEX -19
+#define ERROR_LOAD_OUT_POINT -20
 
 /* dckb errors */
 #define ERROR_DCKB_INCORRECT_OUTPUT -30

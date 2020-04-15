@@ -42,7 +42,7 @@
 #define EPOCH_LENGTH_BITS 16
 #define EPOCH_LENGTH_MASK ((1 << EPOCH_LENGTH_BITS) - 1)
 
-/* Type hash of NervosDAO script,
+/* Code hash of NervosDAO script,
  * blake2b(Script(hash_type: Type, code_hash: <type_id>))
  */
 const uint8_t NERVOS_DAO_TYPE_HASH[] = {
@@ -52,7 +52,7 @@ const uint8_t NERVOS_DAO_TYPE_HASH[] = {
 
 /* Function to check DAO cells */
 
-int is_dao_type(unsigned char type_hash[HASH_SIZE]) {
+int is_dao_type(uint8_t type_hash[HASH_SIZE]) {
   int ret = memcmp(NERVOS_DAO_TYPE_HASH, type_hash, HASH_SIZE);
   printf("ret %i", ret);
   return ret == 0;

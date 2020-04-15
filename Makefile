@@ -2,7 +2,7 @@ TARGET := riscv64-unknown-elf
 CC := $(TARGET)-gcc
 LD := $(TARGET)-gcc
 OBJCOPY := $(TARGET)-objcopy
-CFLAGS := -DCKB_C_STDLIB_PRINTF -nostartfiles -O3 -Ideps/molecule -I deps/ckb-c-std-lib -I deps/ckb-c-std-lib/libc -I c -I build -Wall -Werror -Wno-nonnull-compare -Wno-unused-function -g
+CFLAGS := -nostartfiles -O3 -Ideps/molecule -I deps/ckb-c-std-lib -I deps/ckb-c-std-lib/libc -I c -I build -Wall -Werror -Wno-nonnull-compare -Wno-unused-function -g
 LDFLAGS := -Wl,-static -fdata-sections -ffunction-sections -Wl,--gc-sections
 MOLC := moleculec
 MOLC_VERSION := 0.4.1
@@ -24,7 +24,7 @@ specs/cells/always_success: c/always_success.c
 	$(OBJCOPY) --only-keep-debug $@ $(subst specs/cells,build,$@.debug)
 	$(OBJCOPY) --strip-debug --strip-all $@
 
-specs/cells/dckb: c/dckb.c ${PROTOCOL_HEADER} c/common.h c/dao_utils.h
+specs/cells/dckb: c/dckb.c ${PROTOCOL_HEADER} c/common.h c/const.h c/dao_utils.h
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
 	$(OBJCOPY) --only-keep-debug $@ $(subst specs/cells,build,$@.debug)
 	$(OBJCOPY) --strip-debug --strip-all $@

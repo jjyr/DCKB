@@ -255,7 +255,7 @@ fn test_dckb_deposit() {
     let (output_cell, _) = gen_dao_cell(
         &mut data_loader,
         Capacity::shannons(123456780000 - DCKB_CAPACITY.as_u64() - change_coin),
-        gen_secp256k1_lock_script(lock_args.clone()),
+        gen_deposit_lock_lock_script(),
     );
     let (dckb_output_cell, _, dckb_output_data) = gen_dckb_cell(
         &mut data_loader,

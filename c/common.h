@@ -24,6 +24,7 @@ typedef unsigned __int128 uint128_t;
 #define ERROR_LOAD_DCKB_DATA -18
 #define ERROR_LOAD_HEADER_INDEX -19
 #define ERROR_LOAD_OUT_POINT -20
+#define ERROR_INCORRECT_DEPOSIT_LOCK -21
 
 /* dckb errors */
 #define ERROR_DCKB_INCORRECT_OUTPUT -30
@@ -58,8 +59,10 @@ typedef unsigned __int128 uint128_t;
 #define UDT_LEN 16
 #define HASH_SIZE 32
 #define DAO_OCCUPIED_CAPACITY 10200000000
+#define MAX_DEPOSIT_DAO_CAPACITY 100000000000000  // 100_0000 CKB
 
 #include "ckb_syscalls.h"
+#include "const.h"
 #include "dao_utils.h"
 #include "protocol.h"
 #include "stdio.h"
@@ -74,8 +77,64 @@ typedef struct {
   uint32_t cell_index;
 } TokenInfo;
 
+int check_deposit_lock(uint64_t i, uint64_t source) {
+  uint8_t script[MAX_SCRIPT_SIZE];
+  uint64_t len = MAX_SCRIPT_SIZE;
+  int ret = ckb_checked_load_cell_by_field(script, &len, 0, i, source,
+                                           CKB_CELL_FIELD_LOCK);
+  if (ret != CKB_SUCCESS || len > MAX_SCRIPT_SIZE) {
+    return ERROR_ENCODING;
+  }
+  mol_seg_t script_seg;
+  script_seg.ptr = script;
+  script_seg.size = len;
+  if (MolReader_Script_verify(&script_seg, false) != MOL_OK) {
+    return ERROR_ENCODING;
+  }
+  mol_seg_t code_hash_seg = MolReader_Script_get_code_hash(&script_seg);
+  mol_seg_t hash_type_seg = MolReader_Script_get_hash_type(&script_seg);
+  mol_seg_t args_seg = MolReader_Script_get_args(&script_seg);
+  mol_seg_t raw_args_seg = MolReader_Bytes_raw_bytes(&args_seg);
+  /* check code hash */
+  ret = memcmp(code_hash_seg.ptr, DEPOSIT_LOCK_CODE_HASH, HASH_SIZE);
+  if (ret != 0) {
+    printf("unexpected deposit lock code hash");
+    return ERROR_INCORRECT_DEPOSIT_LOCK;
+  }
+  /* check hash type */
+  if (*hash_type_seg.ptr != 0) {
+    printf("unexpected deposit lock hash type");
+    return ERROR_INCORRECT_DEPOSIT_LOCK;
+  }
+  /* check args */
+  if (raw_args_seg.size != HASH_SIZE) {
+    printf("unexpected deposit args size %d", raw_args_seg.size);
+    return ERROR_INCORRECT_DEPOSIT_LOCK;
+  }
+  uint8_t script_hash[HASH_SIZE];
+  len = HASH_SIZE;
+  ret = ckb_load_script_hash(script_hash, &len, 0);
+  if (ret != CKB_SUCCESS || len != HASH_SIZE) {
+    return ERROR_ENCODING;
+  }
+  ret = memcmp(script_hash, raw_args_seg.ptr, HASH_SIZE);
+  if (ret != 0) {
+    printf("unexpected deposit lock args");
+    for (int i = 0; i < HASH_SIZE; i++) {
+      printf("%d", raw_args_seg.ptr[i]);
+    }
+    printf("expected lock args");
+    for (int i = 0; i < HASH_SIZE; i++) {
+      printf("%d", script_hash[i]);
+    }
+    return ERROR_INCORRECT_DEPOSIT_LOCK;
+  }
+  return CKB_SUCCESS;
+}
+
 /* fetch inputs coins */
-int fetch_inputs(unsigned char *dckb_type_hash, int *withdraw1_dao_cnt,
+int fetch_inputs(const uint8_t dckb_type_hash[HASH_SIZE],
+                 int *withdraw1_dao_cnt,
                  TokenInfo withdraw1_dao_infos[MAX_SWAP_CELLS],
                  int *withdraw2_dao_cnt,
                  TokenInfo withdraw2_dao_infos[MAX_SWAP_CELLS],
@@ -116,6 +175,12 @@ int fetch_inputs(unsigned char *dckb_type_hash, int *withdraw1_dao_cnt,
     int is_dao = is_dao_type(input_type_hash);
     if (is_dao) {
       printf("check a new withdraw cell");
+      /* only count deposit lock dao cells */
+      ret = check_deposit_lock(i, CKB_SOURCE_INPUT);
+      printf("check deposit lock ret %d", ret);
+      if (ret != CKB_SUCCESS) {
+        goto next;
+      }
       /* withdraw NervosDAO */
       uint64_t deposited_block_number = *(uint64_t *)buf;
       len = CKB_LEN;
@@ -169,7 +234,8 @@ int fetch_inputs(unsigned char *dckb_type_hash, int *withdraw1_dao_cnt,
 }
 
 /* fetch outputs coins */
-int fetch_outputs(unsigned char *dckb_type_hash, int *deposited_dao_cnt,
+int fetch_outputs(const uint8_t dckb_type_hash[HASH_SIZE],
+                  int *deposited_dao_cnt,
                   SwapInfo deposited_dao[MAX_SWAP_CELLS],
                   int *new_dckb_cell_cnt,
                   SwapInfo new_dckb_cell[MAX_SWAP_CELLS], int *dckb_cell_cnt,
@@ -210,6 +276,12 @@ int fetch_outputs(unsigned char *dckb_type_hash, int *deposited_dao_cnt,
     if (is_dao) {
       printf("check a new deposit cell");
       if (!deposited_dao_cnt || !deposited_dao) goto next;
+      /* only count deposit lock dao cells */
+      ret = check_deposit_lock(i, CKB_SOURCE_OUTPUT);
+      printf("check deposit lock ret %d", ret);
+      if (ret != CKB_SUCCESS) {
+        goto next;
+      }
       /* check deposited dao cell */
       uint64_t amount;
       len = CKB_LEN;
@@ -217,6 +289,10 @@ int fetch_outputs(unsigned char *dckb_type_hash, int *deposited_dao_cnt,
           &amount, &len, 0, i, CKB_SOURCE_OUTPUT, CKB_CELL_FIELD_CAPACITY);
       if (ret != CKB_SUCCESS || len != CKB_LEN) {
         return ERROR_SYSCALL;
+      }
+      /* a sinlge DAO cell contained capacity must less than this limitation */
+      if (amount > MAX_DEPOSIT_DAO_CAPACITY) {
+        goto next;
       }
       /* record deposited dao amount */
       if (*deposited_dao_cnt >= MAX_SWAP_CELLS) {

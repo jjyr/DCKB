@@ -39,6 +39,7 @@
 
 #include "ckb_utils.h"
 #include "common.h"
+#include "const.h"
 
 /* since relative time 4 epochs */
 #define PHASE2_TIMEOUT_SINCE 0xa000010000000004

@@ -46,6 +46,7 @@
 #include "blake2b.h"
 #include "ckb_syscalls.h"
 #include "common.h"
+#include "const.h"
 #include "protocol.h"
 #include "stdio.h"
 

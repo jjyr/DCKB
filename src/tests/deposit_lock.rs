@@ -21,10 +21,15 @@ fn test_deposit_lock_phase1_unlock() {
     let (withdraw_header, withdraw_epoch) = gen_header(2000610, 10001000, 575, 2000000, 1100);
 
     // inputs cells
+    let deposit_lock_script = gen_deposit_lock_lock_script();
+    let proxy_lock_data: Bytes = {
+        let deposit_lock_script_hash: [u8; 32] = deposit_lock_script.calc_script_hash().unpack();
+        deposit_lock_script_hash[..8].to_vec().into()
+    };
     let (cell, previous_out_point) = gen_dao_cell(
         &mut data_loader,
         Capacity::shannons(123456780000),
-        gen_deposit_lock_lock_script(),
+        deposit_lock_script,
     );
     let (dckb_cell, dckb_previous_out_point, dckb_cell_data) = gen_dckb_cell(
         &mut data_loader,
@@ -106,7 +111,7 @@ fn test_deposit_lock_phase1_unlock() {
         .output(dao_withdraw_cell)
         .output_data(dao_withdraw_cell_data.pack())
         .output(lock_proxy_cell)
-        .output_data(Bytes::new().pack())
+        .output_data(proxy_lock_data.pack())
         .output(dckb_change_cell)
         .output_data(dckb_change_data.pack())
         .header_dep(deposit_header.hash())
@@ -140,10 +145,15 @@ fn test_deposit_lock_phase2_unlock() {
     let (deposit_header, deposit_epoch) = gen_header(1554, 10000000, 35, 1000, 1000);
     let (withdraw_header, withdraw_epoch) = gen_header(2000610, 10001000, 575, 2000000, 1100);
     // inputs
+    let deposit_lock_script = gen_deposit_lock_lock_script();
+    let proxy_lock_data: Bytes = {
+        let deposit_lock_script_hash: [u8; 32] = deposit_lock_script.calc_script_hash().unpack();
+        deposit_lock_script_hash[..8].to_vec().into()
+    };
     let (cell, previous_out_point) = gen_dao_cell(
         &mut data_loader,
         Capacity::shannons(123456780000),
-        gen_deposit_lock_lock_script(),
+        deposit_lock_script,
     );
     let (dckb_cell, dckb_previous_out_point, dckb_cell_data) = gen_dckb_cell(
         &mut data_loader,
@@ -206,16 +216,18 @@ fn test_deposit_lock_phase2_unlock() {
                 index: 0,
             })
             .build();
-    let input_lock_proxy_cell_meta =
-        CellMetaBuilder::from_cell_output(lock_proxy_cell, Bytes::new())
-            .out_point(lock_proxy_out_point.clone())
-            .transaction_info(TransactionInfo {
-                block_hash: deposit_header.hash(),
-                block_number: deposit_header.number(),
-                block_epoch: EpochNumberWithFraction::new(575, 610, 1100),
-                index: 0,
-            })
-            .build();
+    let input_lock_proxy_cell_meta = CellMetaBuilder::from_cell_output(
+        lock_proxy_cell,
+        proxy_lock_data
+    )
+    .out_point(lock_proxy_out_point.clone())
+    .transaction_info(TransactionInfo {
+        block_hash: deposit_header.hash(),
+        block_number: deposit_header.number(),
+        block_epoch: EpochNumberWithFraction::new(575, 610, 1100),
+        index: 0,
+    })
+    .build();
 
     let resolved_inputs = vec![
         input_cell_meta,

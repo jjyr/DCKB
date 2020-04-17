@@ -15,7 +15,8 @@
  *
  * phase1:
  * 1. check `inputs DCKB - outputs DCKB = X`.
- * 2. has one output cell that has no type field as proxy lock cell.
+ * 2. has one output cell that data set to first 8 bytes of the current
+ * `script_hash` and has no type field, as the proxy lock cell.
  *
  * phase2:
  * 1. check `inputs DCKB - outputs DCKB = Y`.
@@ -121,17 +122,32 @@ int load_proxy_lock_cell_index(uint8_t *index) {
 
 /* check validity of proxy lock cell
  */
-int check_proxy_lock_cell(uint64_t i, uint64_t source) {
+int check_proxy_lock_cell(uint8_t script_hash[HASH_SIZE], uint64_t i,
+                          uint64_t source) {
   uint64_t len = 0;
+  /* proxy lock cell must has no type field */
   int ret = ckb_checked_load_cell_by_field(NULL, &len, 0, i, source,
                                            CKB_CELL_FIELD_TYPE_HASH);
-  printf("check proxy lock cell i %ld source %ld ret %d len %ld", i, source,
-         ret, len);
-  /* proxy lock cell must has no type field */
-  if (ret == CKB_ITEM_MISSING) {
-    return CKB_SUCCESS;
+  printf("check proxy lock cell i %ld source %ld ret %d", i, source, ret);
+  if (ret == CKB_INDEX_OUT_OF_BOUND) {
+    return ret;
   }
-  return ERROR_DL_INVALID_PROXY_LOCK;
+  if (ret != CKB_ITEM_MISSING) {
+    return ERROR_DL_INVALID_PROXY_LOCK;
+  }
+  /* proxy data must equals to script hash */
+  uint8_t buf[PROXY_LOCK_CELL_DATA_LEN];
+  len = PROXY_LOCK_CELL_DATA_LEN;
+  ret = ckb_load_cell_data(buf, &len, 0, i, source);
+  if (ret != CKB_SUCCESS && len != PROXY_LOCK_CELL_DATA_LEN) {
+    return ERROR_ENCODING;
+  }
+  ret = memcmp(buf, script_hash, PROXY_LOCK_CELL_DATA_LEN);
+  if (ret == 0) {
+    return CKB_SUCCESS;
+  } else {
+    return ERROR_DL_INVALID_PROXY_LOCK;
+  }
 }
 
 /* check group inputs
@@ -272,13 +288,61 @@ int load_out_point_seg(uint64_t i, uint64_t source, uint8_t buf[OUT_POINT_SIZE],
   return CKB_SUCCESS;
 }
 
+/* phase1 should output one proxy cell
+ * 1. proxy cell should be validity
+ * 2. all other cells should not be a valid proxy cell
+ */
+int check_phase1_only_one_proxy_lock_cell(uint64_t proxy_lock_cell_i) {
+  uint8_t script_hash[HASH_SIZE];
+  uint64_t len = HASH_SIZE;
+  int ret = ckb_load_script_hash(script_hash, &len, 0);
+  if (ret != CKB_SUCCESS || len != HASH_SIZE) {
+    return ERROR_ENCODING;
+  }
+  /* check proxy lock cell */
+  ret =
+      check_proxy_lock_cell(script_hash, proxy_lock_cell_i, CKB_SOURCE_OUTPUT);
+  printf("check proxy lock cell ret %d", ret);
+  if (ret != CKB_SUCCESS) {
+    return ret;
+  }
+
+  /* check other outputs */
+  int i = 0;
+  while (1) {
+    if (i == proxy_lock_cell_i) {
+      goto next;
+    }
+    int ret = check_proxy_lock_cell(script_hash, i, CKB_SOURCE_OUTPUT);
+    if (ret == CKB_INDEX_OUT_OF_BOUND) {
+      break;
+    }
+    if (ret != CKB_SUCCESS && ret != ERROR_DL_INVALID_PROXY_LOCK) {
+      return ret;
+    }
+    /* only one proxy lock should exists */
+    if (ret == CKB_SUCCESS) {
+      return ERROR_DL_MULTIPLE_PROXY_LOCK;
+    }
+  next:
+    i++;
+  }
+  return CKB_SUCCESS;
+}
+
 /* unlock via proxy cell
  * 1. proxy cell should be validity
  * 2. all inputs is from the same tx as the proxy cell froms
  */
 int check_phase2_unlock_via_proxy_cell(uint64_t proxy_lock_cell_i) {
+  uint8_t script_hash[HASH_SIZE];
+  uint64_t len = HASH_SIZE;
+  int ret = ckb_load_script_hash(script_hash, &len, 0);
+  if (ret != CKB_SUCCESS || len != HASH_SIZE) {
+    return ERROR_ENCODING;
+  }
   /* check proxy lock cell */
-  int ret = check_proxy_lock_cell(proxy_lock_cell_i, CKB_SOURCE_INPUT);
+  ret = check_proxy_lock_cell(script_hash, proxy_lock_cell_i, CKB_SOURCE_INPUT);
   printf("check proxy lock cell ret %d", ret);
   if (ret != CKB_SUCCESS) {
     return ret;
@@ -381,7 +445,7 @@ int main() {
     if (ret != CKB_SUCCESS) {
       return ret;
     }
-    ret = check_proxy_lock_cell(proxy_lock_cell_i, CKB_SOURCE_OUTPUT);
+    ret = check_phase1_only_one_proxy_lock_cell(proxy_lock_cell_i);
     if (ret != CKB_SUCCESS) {
       return ret;
     }

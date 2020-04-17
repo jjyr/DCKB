@@ -14,10 +14,15 @@ PROTOCOL_URL := https://raw.githubusercontent.com/nervosnetwork/ckb/${PROTOCOL_V
 # docker pull nervos/ckb-riscv-gnu-toolchain:bionic-20190702
 BUILDER_DOCKER := nervos/ckb-riscv-gnu-toolchain@sha256:7b168b4b109a0f741078a71b7c4dddaf1d283a5244608f7851f5714fbad273ba
 
+build:
+	make all-via-docker
+	cargo build
+	make all-via-docker
+
 all: specs/cells/dckb specs/cells/deposit_lock specs/cells/always_success
 
 all-via-docker: ${PROTOCOL_HEADER}
-	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make"
+	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make all"
 
 specs/cells/always_success: c/always_success.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
@@ -64,4 +69,4 @@ fmt:
 	clang-format -i -style=Google $(wildcard *.h */*.h *.c */*.c)
 	git diff --exit-code
 
-.PHONY: all all-via-docker dist clean fmt
+.PHONY: all all-via-docker dist clean fmt build

@@ -41,6 +41,7 @@ typedef unsigned __int128 uint128_t;
 #define ERROR_DL_INVALID_PROXY_LOCK -44
 #define ERROR_DL_INVALID_PROXY_LOCK_TX_HASH -45
 #define ERROR_DL_INVALID_SINCE -46
+#define ERROR_DL_MULTIPLE_PROXY_LOCK -47
 
 /* since */
 #define SINCE_VALUE_BITS 56
@@ -53,6 +54,7 @@ typedef unsigned __int128 uint128_t;
 
 /* Contract related */
 #define MAX_SWAP_CELLS 256
+#define PROXY_LOCK_CELL_DATA_LEN 8
 #define CKB_LEN 8
 #define SINCE_LEN 8
 #define BLOCK_NUM_LEN 8

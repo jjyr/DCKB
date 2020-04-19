@@ -42,6 +42,7 @@ typedef unsigned __int128 uint128_t;
 #define ERROR_DL_INVALID_PROXY_LOCK_TX_HASH -45
 #define ERROR_DL_INVALID_SINCE -46
 #define ERROR_DL_MULTIPLE_PROXY_LOCK -47
+#define ERROR_DL_REFUND_CKB_NOT_ENOUGH -48
 
 /* since */
 #define SINCE_VALUE_BITS 56
@@ -109,7 +110,7 @@ int check_deposit_lock(uint64_t i, uint64_t source) {
     return ERROR_INCORRECT_DEPOSIT_LOCK;
   }
   /* check args */
-  if (raw_args_seg.size != HASH_SIZE) {
+  if (raw_args_seg.size != HASH_SIZE * 2) {
     printf("unexpected deposit args size %d", raw_args_seg.size);
     return ERROR_INCORRECT_DEPOSIT_LOCK;
   }
@@ -122,13 +123,6 @@ int check_deposit_lock(uint64_t i, uint64_t source) {
   ret = memcmp(script_hash, raw_args_seg.ptr, HASH_SIZE);
   if (ret != 0) {
     printf("unexpected deposit lock args");
-    for (int i = 0; i < HASH_SIZE; i++) {
-      printf("%d", raw_args_seg.ptr[i]);
-    }
-    printf("expected lock args");
-    for (int i = 0; i < HASH_SIZE; i++) {
-      printf("%d", script_hash[i]);
-    }
     return ERROR_INCORRECT_DEPOSIT_LOCK;
   }
   return CKB_SUCCESS;

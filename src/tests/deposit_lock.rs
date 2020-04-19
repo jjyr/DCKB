@@ -21,7 +21,11 @@ fn test_deposit_lock_phase1_unlock() {
     let (withdraw_header, withdraw_epoch) = gen_header(2000610, 10001000, 575, 2000000, 1100);
 
     // inputs cells
-    let deposit_lock_script = gen_deposit_lock_lock_script();
+    let deposit_lock_script = gen_deposit_lock_lock_script(
+        gen_secp256k1_lock_script(lock_args.clone())
+            .calc_script_hash()
+            .unpack(),
+    );
     let proxy_lock_data: Bytes = {
         let deposit_lock_script_hash: [u8; 32] = deposit_lock_script.calc_script_hash().unpack();
         deposit_lock_script_hash[..8].to_vec().into()
@@ -145,7 +149,11 @@ fn test_deposit_lock_phase2_unlock() {
     let (deposit_header, deposit_epoch) = gen_header(1554, 10000000, 35, 1000, 1000);
     let (withdraw_header, withdraw_epoch) = gen_header(2000610, 10001000, 575, 2000000, 1100);
     // inputs
-    let deposit_lock_script = gen_deposit_lock_lock_script();
+    let deposit_lock_script = gen_deposit_lock_lock_script(
+        gen_secp256k1_lock_script(lock_args.clone())
+            .calc_script_hash()
+            .unpack(),
+    );
     let proxy_lock_data: Bytes = {
         let deposit_lock_script_hash: [u8; 32] = deposit_lock_script.calc_script_hash().unpack();
         deposit_lock_script_hash[..8].to_vec().into()
@@ -180,7 +188,9 @@ fn test_deposit_lock_phase2_unlock() {
         .type_(Some(dckb_script()).pack())
         .build();
     let dckb_change_data = dckb_data(123456780000u64.into(), 1554);
-    let withdraw_cell = cell_output_with_only_capacity(123468105678 - DCKB_CAPACITY.as_u64());
+    let withdraw_cell = cell_output_with_only_capacity(123468105678 - DCKB_CAPACITY.as_u64()).as_builder().lock(
+        gen_secp256k1_lock_script(lock_args.clone())
+    ).build();
 
     data_loader
         .headers
@@ -216,18 +226,16 @@ fn test_deposit_lock_phase2_unlock() {
                 index: 0,
             })
             .build();
-    let input_lock_proxy_cell_meta = CellMetaBuilder::from_cell_output(
-        lock_proxy_cell,
-        proxy_lock_data
-    )
-    .out_point(lock_proxy_out_point.clone())
-    .transaction_info(TransactionInfo {
-        block_hash: deposit_header.hash(),
-        block_number: deposit_header.number(),
-        block_epoch: EpochNumberWithFraction::new(575, 610, 1100),
-        index: 0,
-    })
-    .build();
+    let input_lock_proxy_cell_meta =
+        CellMetaBuilder::from_cell_output(lock_proxy_cell, proxy_lock_data)
+            .out_point(lock_proxy_out_point.clone())
+            .transaction_info(TransactionInfo {
+                block_hash: deposit_header.hash(),
+                block_number: deposit_header.number(),
+                block_epoch: EpochNumberWithFraction::new(575, 610, 1100),
+                index: 0,
+            })
+            .build();
 
     let resolved_inputs = vec![
         input_cell_meta,

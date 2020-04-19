@@ -29,8 +29,9 @@
  * NervosDAO.
  *
  * Script args:
- * This script accept 32 bytes args: <dckb type hash>
+ * This script accept 64 bytes args: <dckb type hash> | <lock hash>
  * <dckb type hash>: blake2b(Script(hash_type: Type, code_hash: <dckb type id>))
+ * <lock hash>: lock hash that receives the refund CKB
  *
  * Witness args:
  * This script expect a WitnessArgs and its lock:
@@ -46,7 +47,8 @@
 #define PHASE2_TIMEOUT_SINCE 0xa000010000000004
 
 /* load dckb type hash from script.args */
-int load_dckb_type_hash(uint8_t dckb_type_hash[HASH_SIZE]) {
+int load_dckb_type_hash(uint8_t dckb_type_hash[HASH_SIZE],
+                        uint8_t refund_lock_hash[HASH_SIZE]) {
   int ret;
   uint64_t len = 0;
   uint8_t script[MAX_SCRIPT_SIZE];
@@ -71,11 +73,12 @@ int load_dckb_type_hash(uint8_t dckb_type_hash[HASH_SIZE]) {
   mol_seg_t args_seg = MolReader_Script_get_args(&script_seg);
 
   mol_seg_t raw_args_seg = MolReader_Bytes_raw_bytes(&args_seg);
-  if (raw_args_seg.size != HASH_SIZE) {
+  if (raw_args_seg.size != HASH_SIZE * 2) {
     return ERROR_ENCODING;
   }
 
   memcpy(dckb_type_hash, raw_args_seg.ptr, HASH_SIZE);
+  memcpy(refund_lock_hash, raw_args_seg.ptr + HASH_SIZE, HASH_SIZE);
   return CKB_SUCCESS;
 }
 
@@ -418,9 +421,70 @@ int check_phase2_unlock_via_timeout() {
   return CKB_SUCCESS;
 }
 
+/* assert input group cell's capacity equals to outputs(where
+ * lock=refund_lock_hash) cell's capacity  */
+int check_refund_ckb_cell(uint8_t refund_lock_hash[HASH_SIZE]) {
+  int i = 0;
+  uint64_t input_cells_capacity = 0;
+  while (1) {
+    uint64_t capacity = 0;
+    uint64_t len = CKB_LEN;
+    int ret = ckb_checked_load_cell_by_field((uint8_t *)&capacity, &len, 0, i,
+                                             CKB_SOURCE_GROUP_INPUT,
+                                             CKB_CELL_FIELD_CAPACITY);
+    if (ret == CKB_INDEX_OUT_OF_BOUND) {
+      break;
+    }
+    if (ret != CKB_SUCCESS || len != CKB_LEN) {
+      return ERROR_ENCODING;
+    }
+    if (__builtin_uaddl_overflow(input_cells_capacity, capacity,
+                                 &input_cells_capacity)) {
+      return ERROR_OVERFLOW;
+    }
+    i++;
+  }
+  uint64_t refund_capacity = 0;
+  i = 0;
+  while (1) {
+    uint8_t lock_hash[HASH_SIZE];
+    uint64_t len = HASH_SIZE;
+    int ret = ckb_checked_load_cell_by_field(
+        lock_hash, &len, 0, i, CKB_SOURCE_OUTPUT, CKB_CELL_FIELD_LOCK_HASH);
+    if (ret == CKB_INDEX_OUT_OF_BOUND) {
+      break;
+    }
+    if (ret != CKB_SUCCESS || len != HASH_SIZE) {
+      return ERROR_ENCODING;
+    }
+    ret = memcmp(lock_hash, refund_lock_hash, HASH_SIZE);
+    if (ret != 0) {
+      goto next;
+    }
+    uint64_t capacity = 0;
+    len = CKB_LEN;
+    ret = ckb_checked_load_cell_by_field((uint8_t *)&capacity, &len, 0, i,
+                                         CKB_SOURCE_OUTPUT,
+                                         CKB_CELL_FIELD_CAPACITY);
+    if (ret != CKB_SUCCESS || len != CKB_LEN) {
+      return ERROR_ENCODING;
+    }
+    if (__builtin_uaddl_overflow(refund_capacity, capacity, &refund_capacity)) {
+      return ERROR_OVERFLOW;
+    }
+  next:
+    i++;
+  }
+  if (refund_capacity < input_cells_capacity) {
+    return ERROR_DL_REFUND_CKB_NOT_ENOUGH;
+  }
+  return CKB_SUCCESS;
+}
+
 int main() {
   uint8_t dckb_type_hash[HASH_SIZE];
-  int ret = load_dckb_type_hash(dckb_type_hash);
+  uint8_t refund_lock_hash[HASH_SIZE];
+  int ret = load_dckb_type_hash(dckb_type_hash, refund_lock_hash);
   printf("load dckb type hash %d", ret);
   if (ret != CKB_SUCCESS) {
     return ret;
@@ -475,6 +539,11 @@ int main() {
       if (ret != CKB_SUCCESS) {
         return ret;
       }
+    }
+
+    ret = check_refund_ckb_cell(refund_lock_hash);
+    if (ret != CKB_SUCCESS) {
+      return ret;
     }
   }
 

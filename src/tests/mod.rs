@@ -334,10 +334,16 @@ fn gen_secp256k1_lock_script(lock_args: Bytes) -> Script {
         .build()
 }
 
-fn gen_deposit_lock_lock_script() -> Script {
-    let dckb_type_hash: [u8; 32] = Script::calc_script_hash(&dckb_script()).unpack();
+fn gen_deposit_lock_lock_script(lock_hash: [u8; 32]) -> Script {
+    let args: [u8; 64] = {
+        let mut args = [0u8; 64];
+        let dckb_type_hash: [u8; 32] = Script::calc_script_hash(&dckb_script()).unpack();
+        args[..32].copy_from_slice(&dckb_type_hash);
+        args[32..].copy_from_slice(&lock_hash);
+        args
+    };
     Script::new_builder()
-        .args(Bytes::from(dckb_type_hash.to_vec()).pack())
+        .args(Bytes::from(args.to_vec()).pack())
         .code_hash(deposit_lock_code_hash())
         .hash_type(ScriptHashType::Data.into())
         .build()

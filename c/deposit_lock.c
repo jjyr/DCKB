@@ -43,8 +43,8 @@
 #include "common.h"
 #include "const.h"
 
-/* since relative time 4 epochs */
-#define PHASE2_TIMEOUT_SINCE 0xa000010000000004
+/* since relative time 18 epochs(~ 72 hours) */
+#define PHASE2_TIMEOUT_SINCE 0xa000010000000012
 
 /* load dckb type hash from script.args */
 int load_dckb_type_hash(uint8_t dckb_type_hash[HASH_SIZE],

@@ -44,11 +44,6 @@ typedef unsigned __int128 uint128_t;
 #define ERROR_DL_MULTIPLE_PROXY_LOCK -47
 #define ERROR_DL_REFUND_CKB_NOT_ENOUGH -48
 
-/* since */
-#define SINCE_VALUE_BITS 56
-#define SINCE_VALUE_MASK 0x00ffffffffffffff
-#define SINCE_EPOCH_FRACTION_FLAG 0b00100000
-
 #define MAX_SCRIPT_SIZE 32768
 #define MAX_HEADER_SIZE 32768
 #define OUT_POINT_SIZE 36

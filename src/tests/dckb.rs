@@ -106,7 +106,7 @@ fn test_dckb_withdraw() {
 
 #[test]
 fn test_dckb_transfer() {
-    const DAO_OCCUPIED_CAPACITY: u64 = 102_00000000u64;
+    const DAO_OCCUPIED_CAPACITY: u64 = 146_00000000u64;
     let mut data_loader = DummyDataLoader::new();
     let (privkey, lock_args) = gen_lock();
 

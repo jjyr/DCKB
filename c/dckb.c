@@ -149,13 +149,18 @@ int main() {
   uint64_t calculated_capacity;
   uint64_t total_input_dckb = 0;
   for (int i = 0; i < input_dckb_cells_cnt; i++) {
-    ret = align_dao_compensation(i, CKB_SOURCE_INPUT, align_target_data,
-                                 input_dckb_cells[i].block_number,
-                                 input_dckb_cells[i].amount,
-                                 &calculated_capacity);
+    printf("input amount %ld, block_number %ld",
+           (uint64_t)input_dckb_cells[i].amount,
+           input_dckb_cells[i].block_number);
+    ret = align_dao_compensation(
+        input_dckb_cells[i].cell_index, CKB_SOURCE_INPUT, align_target_data,
+        input_dckb_cells[i].block_number, input_dckb_cells[i].amount,
+        &calculated_capacity);
     if (ret != CKB_SUCCESS) {
       return ret;
     }
+    printf("after align input amount %ld, block_number %ld",
+           (uint64_t)calculated_capacity, align_target_data.block_number);
     if (__builtin_uaddl_overflow(total_input_dckb, calculated_capacity,
                                  &total_input_dckb)) {
       return ERROR_OVERFLOW;

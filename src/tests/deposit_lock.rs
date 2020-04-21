@@ -163,9 +163,10 @@ fn test_deposit_lock_phase2_unlock() {
         Capacity::shannons(123456780000),
         deposit_lock_script,
     );
+    let total_dckb = 123468105678;
     let (dckb_cell, dckb_previous_out_point, dckb_cell_data) = gen_dckb_cell(
         &mut data_loader,
-        Capacity::shannons(123468105678),
+        Capacity::shannons(total_dckb),
         lock_args.clone(),
         0,
     );
@@ -187,8 +188,8 @@ fn test_deposit_lock_phase2_unlock() {
         .lock(gen_secp256k1_lock_script(lock_args.clone()))
         .type_(Some(dckb_script()).pack())
         .build();
-    let dckb_change_data = dckb_data(123456780000u64.into(), 1554);
-    let withdraw_cell = cell_output_with_only_capacity(123468105678 - DCKB_CAPACITY.as_u64()).as_builder().lock(
+    let dckb_change_data = dckb_data(123457220000u64.into(), 1554);
+    let withdraw_cell = cell_output_with_only_capacity(total_dckb - DCKB_CAPACITY.as_u64()).as_builder().lock(
         gen_secp256k1_lock_script(lock_args.clone())
     ).build();
 

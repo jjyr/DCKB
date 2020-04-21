@@ -56,7 +56,7 @@ typedef unsigned __int128 uint128_t;
 #define BLOCK_NUM_LEN 8
 #define UDT_LEN 16
 #define HASH_SIZE 32
-#define DAO_OCCUPIED_CAPACITY 10200000000
+#define DAO_OCCUPIED_CAPACITY 14600000000         // 146 Bytes
 #define MAX_DEPOSIT_DAO_CAPACITY 100000000000000  // 100_0000 CKB
 
 #include "ckb_syscalls.h"
@@ -334,25 +334,29 @@ int align_dao_compensation(size_t i, size_t source,
                            uint64_t deposited_block_number,
                            uint64_t original_capacity,
                            uint64_t *calculated_capacity) {
+  dao_header_data_t deposit_data;
+  int ret = load_dao_header_data(i, source, &deposit_data);
+  if (ret != CKB_SUCCESS) {
+    return ret;
+  }
+
+  /* new dckb */
+  if (deposited_block_number == 0) {
+    printf("new dckb deposit block %ld", deposit_data.block_number);
+    deposited_block_number = deposit_data.block_number;
+  }
+
   if (align_target_data.block_number == deposited_block_number) {
     *calculated_capacity = original_capacity;
     return CKB_SUCCESS;
   }
 
   if (align_target_data.block_number < deposited_block_number) {
-    printf("align %ld deposit block %ld", align_target_data.block_number,
-           deposited_block_number);
+    printf("align error target number %ld deposit number %ld",
+           align_target_data.block_number, deposited_block_number);
     return ERROR_DCKB_ALIGN;
   }
-  dao_header_data_t deposit_data;
-  int ret = load_dao_header_data(i, source, &deposit_data);
-  if (ret != CKB_SUCCESS) {
-    return ret;
-  }
-  /* new dckb */
-  if (deposited_block_number == 0) {
-    deposited_block_number = deposit_data.block_number;
-  }
+
   return calculate_dao_input_capacity(DAO_OCCUPIED_CAPACITY, deposit_data,
                                       align_target_data, deposited_block_number,
                                       original_capacity, calculated_capacity);

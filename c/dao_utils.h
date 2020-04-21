@@ -45,10 +45,10 @@
 /* Code hash of NervosDAO script,
  * blake2b(Script(hash_type: Type, code_hash: <type_id>))
  */
-const uint8_t NERVOS_DAO_TYPE_HASH[] = {
-    226, 137, 104, 157, 176, 16, 226, 115, 88,  4,  92, 188, 116, 239, 156, 196,
-    231, 126, 183, 229, 44,  62, 66,  68,  125, 44, 0,  201, 226, 74,  236, 8,
-};
+const uint8_t NERVOS_DAO_TYPE_HASH[] = {204, 119, 196, 222, 172, 5,   214, 138,
+                                        181, 178, 104, 40,  240, 191, 69,  101,
+                                        168, 215, 49,  19,  215, 187, 126, 146,
+                                        184, 54,  43,  138, 116, 229, 142, 88};
 
 /* Function to check DAO cells */
 

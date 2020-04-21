@@ -20,6 +20,7 @@ use std::collections::HashMap;
 use ckb_crypto::secp::Generator;
 use ckb_dao_utils::pack_dao_data;
 use ckb_system_scripts::BUNDLED_CELL;
+use faster_hex::hex_decode;
 use rand::{thread_rng, Rng};
 
 pub const MAX_CYCLES: u64 = std::u64::MAX;
@@ -220,8 +221,28 @@ fn deposit_lock_code_hash() -> Byte32 {
     CellOutput::calc_data_hash(&DEPOSIT_LOCK)
 }
 
-fn dao_code_hash() -> Byte32 {
-    CellOutput::calc_data_hash(&DAO_BIN)
+fn dao_type_id_script() -> Script {
+    let mut code_hash = [0u8; 32];
+    hex_decode(
+        b"00000000000000000000000000000000000000000000000000545950455f4944",
+        &mut code_hash,
+    )
+    .expect("dehex");
+    let mut args = [0u8; 32];
+    hex_decode(
+        b"b2a8500929d6a1294bf9bf1bf565f549fa4a5f1316a3306ad3d4783e64bcf626",
+        &mut args,
+    )
+    .expect("dehex");
+    Script::new_builder()
+        .code_hash(code_hash.pack())
+        .hash_type(ScriptHashType::Type.into())
+        .args(Bytes::from(args.to_vec()).pack())
+        .build()
+}
+
+fn dao_type_id() -> Byte32 {
+    dao_type_id_script().calc_script_hash()
 }
 
 fn gen_normal_cell(
@@ -274,9 +295,8 @@ fn gen_dao_cell(
     let out_point = generate_random_out_point();
 
     let type_ = Script::new_builder()
-        .args(Bytes::new().pack())
-        .code_hash(dao_code_hash())
-        .hash_type(ScriptHashType::Data.into())
+        .code_hash(dao_type_id())
+        .hash_type(ScriptHashType::Type.into())
         .build();
     let cell = CellOutput::new_builder()
         .capacity(capacity.pack())
@@ -355,7 +375,17 @@ fn complete_tx(
 ) -> (TransactionView, Vec<CellMeta>) {
     let (secp_cell, secp_out_point) = script_cell(&SIGHASH_ALL_BIN);
     let (secp_data_cell, secp_data_out_point) = script_cell(&SECP256K1_DATA_BIN);
-    let (dao_cell, dao_out_point) = script_cell(&DAO_BIN);
+    let (dao_cell, dao_out_point) = {
+        // setup type id for dao_cell
+        let (dao_cell, dao_out_point) = script_cell(&DAO_BIN);
+        (
+            dao_cell
+                .as_builder()
+                .type_(Some(dao_type_id_script()).pack())
+                .build(),
+            dao_out_point,
+        )
+    };
     let (dckb_cell, dckb_out_point) = script_cell(&DCKB);
     let (deposit_lock_cell, deposit_lock_out_point) = script_cell(&DEPOSIT_LOCK);
 

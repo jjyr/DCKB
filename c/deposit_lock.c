@@ -6,10 +6,11 @@
  * Motivation:
  * This lock is designed to enforce users to destroy DCKB to get their native
  * CKB back, in withdraw phase1 a user must destroy X DCKB, which correspond to
- * the original deposited CKB. in withdraw phase2 a user must destroy Y DCKB
- * which correspond to the NervosDAO compensation. we also set a timeout after
- * the withdraw phase1, after W blocks, if the user do not perform phase2,
- * anyone can destroy Y DCKB to get unlock the NervosDAO cell.
+ * the `original deposited capacity - occupied capacity`. In withdraw phase2 a
+ * user must destroy Y DCKB which correspond to the NervosDAO compensation. we
+ * also set a timeout after the withdraw phase1, after W blocks, if the user do
+ * not perform phase2, anyone can destroy Y DCKB to get unlock the NervosDAO
+ * cell.
  *
  * Unlock conditions:
  *
@@ -218,7 +219,12 @@ int check_unlock_cells(int *is_phase1, uint64_t *expected_destroy_amount) {
     }
     if (!cell_is_phase1) {
       /* the input cell is in phase1 withdraw */
-      if (__builtin_uaddl_overflow(*expected_destroy_amount, original_capacity,
+      uint64_t efficient_capacity;
+      if (__builtin_usubl_overflow(original_capacity, DAO_OCCUPIED_CAPACITY,
+                                   &efficient_capacity)) {
+        return ERROR_OVERFLOW;
+      }
+      if (__builtin_uaddl_overflow(*expected_destroy_amount, efficient_capacity,
                                    expected_destroy_amount)) {
         return ERROR_OVERFLOW;
       }

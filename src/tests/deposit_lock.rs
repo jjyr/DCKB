@@ -52,7 +52,7 @@ fn test_deposit_lock_phase1_unlock() {
         .lock(gen_secp256k1_lock_script(lock_args.clone()))
         .type_(Some(dckb_script()).pack())
         .build();
-    let dckb_change_data = dckb_data(11325678u64.into(), 1554);
+    let dckb_change_data = dckb_data((11325678u64 + DAO_OCCUPIED_CAPACITY).into(), 1554);
     let lock_proxy_cell = CellOutput::new_builder()
         .capacity(Capacity::bytes(61).unwrap().pack())
         .lock(gen_secp256k1_lock_script(lock_args))

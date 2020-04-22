@@ -25,6 +25,7 @@ use rand::{thread_rng, Rng};
 
 pub const MAX_CYCLES: u64 = std::u64::MAX;
 pub const SIGNATURE_SIZE: usize = 65;
+pub const DAO_OCCUPIED_CAPACITY: u64 = 146_00000000u64;
 
 // errors
 

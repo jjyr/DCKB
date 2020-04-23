@@ -75,7 +75,7 @@ fn test_dckb_withdraw() {
         .type_(Bytes::from(&b[..]).pack())
         .build();
     let dckb_witness = WitnessArgs::new_builder()
-        .type_(Bytes::from(&align_target_index.to_le_bytes()[..]).pack())
+        .type_(Bytes::from(vec![0, align_target_index]).pack())
         .build();
     let builder = TransactionBuilder::default()
         .input(CellInput::new(previous_out_point, 0x2003e8022a0002f3))
@@ -129,7 +129,7 @@ fn test_dckb_transfer() {
         &mut data_loader,
         Capacity::shannons(receiver_coin),
         lock_args,
-        0,
+        1554,
     );
 
     data_loader.headers.insert(header1.hash(), header1.clone());
@@ -167,7 +167,10 @@ fn test_dckb_transfer() {
     let align_target_index: u8 = 1;
 
     let dckb_witness = WitnessArgs::new_builder()
-        .type_(Bytes::from(&align_target_index.to_le_bytes()[..]).pack())
+        .type_(Bytes::from(vec![0, align_target_index]).pack())
+        .build();
+    let dckb2_witness = WitnessArgs::new_builder()
+        .type_(Bytes::from(vec![0]).pack())
         .build();
     // transfer 10000 from 1 to 2
     let builder = TransactionBuilder::default()
@@ -186,7 +189,7 @@ fn test_dckb_transfer() {
         .header_dep(header1.hash())
         .header_dep(header2.hash())
         .witness(dckb_witness.as_bytes().pack())
-        .witness(WitnessArgs::default().as_bytes().pack());
+        .witness(dckb2_witness.as_bytes().pack());
     let (tx, mut resolved_cell_deps2) = complete_tx(&mut data_loader, builder);
     let tx = sign_tx(tx, &privkey);
     for dep in resolved_cell_deps2.drain(..) {

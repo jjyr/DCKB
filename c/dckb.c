@@ -9,13 +9,17 @@
  * > 16 bytes u128 number to store the TOKEN.
  * > 8 bytes u64 number to store the block number.
  *
- * Align block number:
- * > Align block number is a u8 number indicates to dep_headers,
- *   denoted by the first DCKB input's witness type args.
- * > All outputs DCKB cell's must aligned to the header,
- *   which means the header number should heigher than or at least equals to
- * DCKB cells. > Align means that we update the height of DCKB, and update the
- * amount by apply NervosDAO formula.
+ * Align block:
+ * 1. In a transaction, all inputs and outputs DCKB cells should aligned to a
+ * same block number.
+ * 2. Align means we update the height of DCKB to a heigher block number,
+ * and update the amount by apply NervosDAO formula.
+ * 3. All inputs DCKB cell should has a index of dep_headers in the witness's
+ * input_type, the index is denoted by a u8 number, which point to the header of
+ * their current block number
+ * 4. The first output DCKB cell should has a index of dep_headers in the
+ * witness's output_type, the index is denoted by a u8 number, which point to a
+ * block header that all outputs should align to.
  *
  * Verification:
  * This type script make sure the equation between inputs and outputs(all coins
@@ -50,45 +54,6 @@
 #include "protocol.h"
 #include "stdio.h"
 
-int load_align_target_header(uint8_t *index) {
-  int ret;
-  uint64_t len = 0;
-  uint8_t witness[MAX_WITNESS_SIZE];
-
-  len = MAX_WITNESS_SIZE;
-  ret = ckb_load_witness(witness, &len, 0, 0, CKB_SOURCE_GROUP_INPUT);
-  if (ret != CKB_SUCCESS) {
-    return ret;
-  }
-  if (len > MAX_WITNESS_SIZE) {
-    return ERROR_WITNESS_TOO_LONG;
-  }
-
-  mol_seg_t witness_seg;
-  witness_seg.ptr = (uint8_t *)witness;
-  witness_seg.size = len;
-
-  if (MolReader_WitnessArgs_verify(&witness_seg, false) != MOL_OK) {
-    return ERROR_LOAD_WITNESS_ARGS;
-  }
-  /* Load type args */
-  mol_seg_t type_seg = MolReader_WitnessArgs_get_input_type(&witness_seg);
-
-  if (MolReader_BytesOpt_is_none(&type_seg)) {
-    printf("type_seg is none");
-    return ERROR_LOAD_ALIGN_INDEX;
-  }
-
-  mol_seg_t type_bytes_seg = MolReader_Bytes_raw_bytes(&type_seg);
-  if (type_bytes_seg.size != 1) {
-    printf("bytes len is %d", type_bytes_seg.size);
-    return ERROR_LOAD_ALIGN_INDEX;
-  }
-
-  *index = *type_bytes_seg.ptr;
-  return CKB_SUCCESS;
-}
-
 int main() {
   printf("hello");
   int ret;
@@ -101,22 +66,15 @@ int main() {
     return ERROR_SYSCALL;
   }
   /* load aligned target header */
-  uint8_t align_header_index = 0;
-  ret = load_align_target_header(&align_header_index);
+  dao_header_data_t align_target_data;
+  ret = load_dao_header_data_by_cell(0, CKB_SOURCE_GROUP_INPUT, 1,
+                                     &align_target_data);
   printf("load aligned target ret %d", ret);
-  if (ret != CKB_SUCCESS && ret != CKB_INDEX_OUT_OF_BOUND) {
+  if (ret != CKB_SUCCESS && ret != ERROR_LOAD_DAO_HEADER_DATA) {
     return ret;
   }
-  int has_align_header = ret == CKB_SUCCESS;
-  dao_header_data_t align_target_data;
-  if (has_align_header) {
-    ret = load_dao_header_data(align_header_index, CKB_SOURCE_HEADER_DEP,
-                               &align_target_data);
-    printf("load aligned header ret %d", ret);
-    if (ret != CKB_SUCCESS && ret != CKB_INDEX_OUT_OF_BOUND) {
-      return ERROR_LOAD_HEADER;
-    }
-  }
+  /* only transfer DCKB need align target data, we lazy raise this error */
+  int has_aligned_target = ret == CKB_SUCCESS;
 
   /* fetch inputs */
   TokenInfo input_dckb_cells[MAX_SWAP_CELLS];
@@ -148,6 +106,9 @@ int main() {
    * 1. inputs DCKB >= outputs DCKB
    * 2. new DCKB == deposited NervosDAO
    */
+  if (input_dckb_cells_cnt > 0 && !has_aligned_target) {
+    return ERROR_LOAD_ALIGN_TARGET;
+  }
   uint64_t calculated_capacity;
   uint64_t total_input_dckb = 0;
   for (int i = 0; i < input_dckb_cells_cnt; i++) {
@@ -169,6 +130,9 @@ int main() {
     }
   }
 
+  if (output_dckb_cells_cnt > 0 && !has_aligned_target) {
+    return ERROR_LOAD_ALIGN_TARGET;
+  }
   uint64_t total_output_dckb = 0;
   for (int i = 0; i < output_dckb_cells_cnt; i++) {
     if (output_dckb_cells[i].block_number != align_target_data.block_number) {

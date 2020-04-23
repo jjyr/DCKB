@@ -106,7 +106,7 @@ fn test_deposit_lock_phase1_unlock() {
         .type_(Bytes::from(&0u8.to_le_bytes()[..]).pack())
         .build();
     let dckb_witness = WitnessArgs::new_builder()
-        .type_(Bytes::from(&0u8.to_le_bytes()[..]).pack())
+        .type_(Bytes::from(vec![0u8, 0u8]).pack())
         .build();
     let builder = TransactionBuilder::default()
         .input(CellInput::new(previous_out_point, 0))
@@ -255,7 +255,7 @@ fn test_deposit_lock_phase2_unlock() {
         .build();
     let align_target_index: u8 = 1;
     let dckb_witness = WitnessArgs::new_builder()
-        .type_(Bytes::from(vec![align_target_index]).pack())
+        .type_(Bytes::from(vec![0, align_target_index]).pack())
         .build();
     let builder = TransactionBuilder::default()
         .input(CellInput::new(previous_out_point, 0x2003e8022a0002f3))

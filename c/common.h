@@ -13,18 +13,21 @@ typedef unsigned __int128 uint128_t;
 #define ERROR_ENCODING -2
 #define ERROR_SYSCALL -3
 #define ERROR_OVERFLOW -4
-#define ERROR_LOAD_HEADER -10
-#define ERROR_LOAD_SCRIPT -11
-#define ERROR_LOAD_TYPE_ID -12
-#define ERROR_LOAD_WITNESS_ARGS -13
-#define ERROR_LOAD_ALIGN_INDEX -14
-#define ERROR_LOAD_TYPE_HASH -15
-#define ERROR_LOAD_OCCUPIED_CAPACITY -16
-#define ERROR_LOAD_CAPACITY -17
-#define ERROR_LOAD_DCKB_DATA -18
-#define ERROR_LOAD_HEADER_INDEX -19
-#define ERROR_LOAD_OUT_POINT -20
-#define ERROR_INCORRECT_DEPOSIT_LOCK -21
+
+/* load errors */
+#define ERROR_LOAD_HEADER -60
+#define ERROR_LOAD_SCRIPT -61
+#define ERROR_LOAD_TYPE_ID -62
+#define ERROR_LOAD_WITNESS_ARGS -63
+#define ERROR_LOAD_DAO_HEADER_DATA -64
+#define ERROR_LOAD_TYPE_HASH -65
+#define ERROR_LOAD_OCCUPIED_CAPACITY -66
+#define ERROR_LOAD_CAPACITY -67
+#define ERROR_LOAD_DCKB_DATA -68
+#define ERROR_LOAD_HEADER_INDEX -69
+#define ERROR_LOAD_OUT_POINT -70
+#define ERROR_LOAD_ALIGN_TARGET -71
+#define ERROR_INCORRECT_DEPOSIT_LOCK -72
 
 /* dckb errors */
 #define ERROR_DCKB_INCORRECT_OUTPUT -30
@@ -329,21 +332,86 @@ int fetch_outputs(const uint8_t dckb_type_hash[HASH_SIZE],
   return CKB_SUCCESS;
 }
 
+int load_dao_header_data_by_cell(uint64_t i, uint64_t source,
+                                 int is_align_target,
+                                 dao_header_data_t *dao_header_data) {
+  int ret;
+  uint64_t len = 0;
+  uint8_t witness[MAX_WITNESS_SIZE];
+
+  len = MAX_WITNESS_SIZE;
+  ret = ckb_load_witness(witness, &len, 0, i, source);
+  if (ret != CKB_SUCCESS) {
+    return ERROR_LOAD_DAO_HEADER_DATA;
+  }
+  if (len > MAX_WITNESS_SIZE) {
+    return ERROR_WITNESS_TOO_LONG;
+  }
+
+  mol_seg_t witness_seg;
+  witness_seg.ptr = (uint8_t *)witness;
+  witness_seg.size = len;
+
+  if (MolReader_WitnessArgs_verify(&witness_seg, false) != MOL_OK) {
+    return ERROR_LOAD_WITNESS_ARGS;
+  }
+  /* Load type args */
+  mol_seg_t type_seg = MolReader_WitnessArgs_get_input_type(&witness_seg);
+
+  if (MolReader_BytesOpt_is_none(&type_seg)) {
+    printf("type_seg is none");
+    return ERROR_LOAD_DAO_HEADER_DATA;
+  }
+
+  mol_seg_t type_bytes_seg = MolReader_Bytes_raw_bytes(&type_seg);
+  // align target witness must contains two indexes
+  if (is_align_target && type_bytes_seg.size != 2) {
+    printf("bytes len is %d", type_bytes_seg.size);
+    return ERROR_LOAD_DAO_HEADER_DATA;
+  } else if (type_bytes_seg.size != 2 && type_bytes_seg.size != 1) {
+    printf("bytes len is %d", type_bytes_seg.size);
+    return ERROR_LOAD_DAO_HEADER_DATA;
+  }
+
+  uint8_t index;
+  if (!is_align_target) {
+    index = *(uint8_t *)type_bytes_seg.ptr;
+  } else {
+    // align target is at index 1
+    index = *((uint8_t *)type_bytes_seg.ptr + 1);
+  };
+
+  ret = load_dao_header_data(index, CKB_SOURCE_HEADER_DEP, dao_header_data);
+  printf("load dao header data i %d ret %d", index, ret);
+  if (ret != CKB_SUCCESS && ret != CKB_INDEX_OUT_OF_BOUND) {
+    return ERROR_LOAD_HEADER;
+  }
+  return CKB_SUCCESS;
+}
+
 int align_dao_compensation(size_t i, size_t source,
                            dao_header_data_t align_target_data,
                            uint64_t deposited_block_number,
                            uint64_t original_capacity,
                            uint64_t *calculated_capacity) {
   dao_header_data_t deposit_data;
-  int ret = load_dao_header_data(i, source, &deposit_data);
-  if (ret != CKB_SUCCESS) {
-    return ret;
-  }
 
   /* new dckb */
   if (deposited_block_number == 0) {
+    int ret = load_dao_header_data(i, source, &deposit_data);
+    printf("new dckb deposit block ret %d", ret);
+    if (ret != CKB_SUCCESS) {
+      return ERROR_LOAD_DAO_HEADER_DATA;
+    }
     printf("new dckb deposit block %ld", deposit_data.block_number);
     deposited_block_number = deposit_data.block_number;
+  } else {
+    int ret = load_dao_header_data_by_cell(i, source, 0, &deposit_data);
+    printf("load dao header data by cell i %ld source %ld ret %d", i, source,
+           ret);
+    if (ret != CKB_SUCCESS) {
+      return ERROR_LOAD_DAO_HEADER_DATA;
+    }
   }
 
   if (align_target_data.block_number == deposited_block_number) {

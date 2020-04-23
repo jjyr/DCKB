@@ -10,7 +10,7 @@
  * > 8 bytes u64 number to store the block number.
  *
  * Align block number:
- * > Align block number is a u64 number indicates to dep_headers,
+ * > Align block number is a u8 number indicates to dep_headers,
  *   denoted by the first DCKB input's witness type args.
  * > All outputs DCKB cell's must aligned to the header,
  *   which means the header number should heigher than or at least equals to
@@ -50,7 +50,7 @@
 #include "protocol.h"
 #include "stdio.h"
 
-int load_align_target_header(uint64_t *index) {
+int load_align_target_header(uint8_t *index) {
   int ret;
   uint64_t len = 0;
   uint8_t witness[MAX_WITNESS_SIZE];
@@ -75,15 +75,17 @@ int load_align_target_header(uint64_t *index) {
   mol_seg_t type_seg = MolReader_WitnessArgs_get_input_type(&witness_seg);
 
   if (MolReader_BytesOpt_is_none(&type_seg)) {
+    printf("type_seg is none");
     return ERROR_LOAD_ALIGN_INDEX;
   }
 
   mol_seg_t type_bytes_seg = MolReader_Bytes_raw_bytes(&type_seg);
-  if (type_bytes_seg.size != 8) {
+  if (type_bytes_seg.size != 1) {
+    printf("bytes len is %d", type_bytes_seg.size);
     return ERROR_LOAD_ALIGN_INDEX;
   }
 
-  *index = *(uint64_t *)type_bytes_seg.ptr;
+  *index = *type_bytes_seg.ptr;
   return CKB_SUCCESS;
 }
 
@@ -99,7 +101,7 @@ int main() {
     return ERROR_SYSCALL;
   }
   /* load aligned target header */
-  uint64_t align_header_index = 0;
+  uint8_t align_header_index = 0;
   ret = load_align_target_header(&align_header_index);
   printf("load aligned target ret %d", ret);
   if (ret != CKB_SUCCESS && ret != CKB_INDEX_OUT_OF_BOUND) {

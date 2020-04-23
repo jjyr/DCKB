@@ -103,10 +103,10 @@ fn test_deposit_lock_phase1_unlock() {
     let lock_proxy_cell_index: u8 = 1;
     let witness = WitnessArgs::new_builder()
         .lock(Bytes::from(vec![lock_proxy_cell_index]).pack())
-        .type_(Bytes::from(&0u64.to_le_bytes()[..]).pack())
+        .type_(Bytes::from(&0u8.to_le_bytes()[..]).pack())
         .build();
     let dckb_witness = WitnessArgs::new_builder()
-        .type_(Bytes::from(&0u64.to_le_bytes()[..]).pack())
+        .type_(Bytes::from(&0u8.to_le_bytes()[..]).pack())
         .build();
     let builder = TransactionBuilder::default()
         .input(CellInput::new(previous_out_point, 0))
@@ -189,9 +189,10 @@ fn test_deposit_lock_phase2_unlock() {
         .type_(Some(dckb_script()).pack())
         .build();
     let dckb_change_data = dckb_data(123457220000u64.into(), 1554);
-    let withdraw_cell = cell_output_with_only_capacity(total_dckb - DCKB_CAPACITY.as_u64()).as_builder().lock(
-        gen_secp256k1_lock_script(lock_args.clone())
-    ).build();
+    let withdraw_cell = cell_output_with_only_capacity(total_dckb - DCKB_CAPACITY.as_u64())
+        .as_builder()
+        .lock(gen_secp256k1_lock_script(lock_args.clone()))
+        .build();
 
     data_loader
         .headers
@@ -252,9 +253,9 @@ fn test_deposit_lock_phase2_unlock() {
         .lock(Bytes::from(vec![lock_proxy_cell_index]).pack())
         .type_(Bytes::from(&b[..]).pack())
         .build();
-    let align_target_index: u64 = 1;
+    let align_target_index: u8 = 1;
     let dckb_witness = WitnessArgs::new_builder()
-        .type_(Bytes::from(&align_target_index.to_le_bytes()[..]).pack())
+        .type_(Bytes::from(vec![align_target_index]).pack())
         .build();
     let builder = TransactionBuilder::default()
         .input(CellInput::new(previous_out_point, 0x2003e8022a0002f3))

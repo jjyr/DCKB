@@ -67,7 +67,7 @@ fn test_dckb_withdraw() {
 
     let resolved_inputs = vec![input_cell_meta, input_dckb_cell_meta];
     let mut resolved_cell_deps = vec![];
-    let align_target_index: u64 = 0;
+    let align_target_index: u8 = 0;
 
     let mut b = [0; 8];
     LittleEndian::write_u64(&mut b, 1);
@@ -164,7 +164,7 @@ fn test_dckb_transfer() {
 
     let resolved_inputs = vec![input_cell_meta, input_dckb_cell_meta];
     let mut resolved_cell_deps = vec![];
-    let align_target_index: u64 = 1;
+    let align_target_index: u8 = 1;
 
     let dckb_witness = WitnessArgs::new_builder()
         .type_(Bytes::from(&align_target_index.to_le_bytes()[..]).pack())

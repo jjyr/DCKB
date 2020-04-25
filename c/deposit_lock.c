@@ -572,9 +572,34 @@ int main() {
     return ret;
   }
 
+  if (input_dckb_cells_cnt == 0) {
+    printf("input_dckb_cells_cnt %d", input_dckb_cells_cnt);
+    return ERROR_DL_INCORRECT_DESTROY_AMOUNT;
+  }
+  /* calculate input dckb */
+  dao_header_data_t align_target_data;
+  ret = load_dao_header_data_by_cell(input_dckb_cells[0].cell_index,
+                                     CKB_SOURCE_INPUT, 1, &align_target_data);
+  printf("load aligned target ret %d", ret);
+  if (ret != CKB_SUCCESS) {
+    return ERROR_LOAD_DAO_HEADER_DATA;
+  }
+  uint64_t calculated_capacity;
   uint64_t total_input_dckb = 0;
   for (int i = 0; i < input_dckb_cells_cnt; i++) {
-    if (__builtin_uaddl_overflow(total_input_dckb, input_dckb_cells[i].amount,
+    printf("input amount %ld, block_number %ld",
+           (uint64_t)input_dckb_cells[i].amount,
+           input_dckb_cells[i].block_number);
+    ret = align_dao_compensation(
+        input_dckb_cells[i].cell_index, CKB_SOURCE_INPUT, align_target_data,
+        input_dckb_cells[i].block_number, input_dckb_cells[i].amount,
+        &calculated_capacity);
+    if (ret != CKB_SUCCESS) {
+      return ret;
+    }
+    printf("after align input amount %ld, block_number %ld",
+           (uint64_t)calculated_capacity, align_target_data.block_number);
+    if (__builtin_uaddl_overflow(total_input_dckb, calculated_capacity,
                                  &total_input_dckb)) {
       return ERROR_OVERFLOW;
     }
@@ -587,7 +612,9 @@ int main() {
       return ERROR_OVERFLOW;
     }
   }
-  printf("total output dckb %ld", total_output_dckb);
+
+  printf("total input dckb %ld total output dckb %ld", total_input_dckb,
+         total_output_dckb);
 
   uint64_t destroy_amount;
   if (__builtin_usubl_overflow(total_input_dckb, total_output_dckb,

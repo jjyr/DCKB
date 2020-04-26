@@ -67,7 +67,7 @@ int main() {
   }
   /* load aligned target header */
   dao_header_data_t align_target_data;
-  ret = load_dao_header_data_by_cell(0, CKB_SOURCE_GROUP_INPUT, 1,
+  ret = load_dao_header_data_by_cell(0, CKB_SOURCE_GROUP_INPUT, 1, 0ul,
                                      &align_target_data);
   printf("load aligned target ret %d", ret);
   if (ret != CKB_SUCCESS && ret != ERROR_LOAD_DAO_HEADER_DATA) {

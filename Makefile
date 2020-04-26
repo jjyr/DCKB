@@ -18,6 +18,7 @@ build:
 	make all-via-docker
 	cargo build
 	make all-via-docker
+	cargo build
 
 all: specs/cells/dckb specs/cells/deposit_lock specs/cells/always_success
 

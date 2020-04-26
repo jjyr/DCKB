@@ -261,7 +261,9 @@ fn test_dckb_deposit() {
     );
     let (dckb_output_cell, _, dckb_output_data) = gen_dckb_cell(
         &mut data_loader,
-        Capacity::shannons(123456780000 - DCKB_CAPACITY.as_u64() - change_coin),
+        Capacity::shannons(
+            123456780000 - DAO_OCCUPIED_CAPACITY - DCKB_CAPACITY.as_u64() - change_coin,
+        ),
         lock_args,
         0,
     );

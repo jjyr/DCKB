@@ -115,10 +115,9 @@ int main() {
     printf("input amount %ld, block_number %ld",
            (uint64_t)input_dckb_cells[i].amount,
            input_dckb_cells[i].block_number);
-    ret = align_dao_compensation(
-        input_dckb_cells[i].cell_index, CKB_SOURCE_INPUT, align_target_data,
-        input_dckb_cells[i].block_number, input_dckb_cells[i].amount,
-        &calculated_capacity);
+    ret = align_dckb_cell(input_dckb_cells[i].cell_index, CKB_SOURCE_INPUT,
+                          align_target_data, input_dckb_cells[i].block_number,
+                          input_dckb_cells[i].amount, &calculated_capacity);
     if (ret != CKB_SUCCESS) {
       return ret;
     }
@@ -172,6 +171,10 @@ int main() {
   for (int i = 0; i < deposited_dao_cells_cnt; i++) {
     uint64_t amount = (uint64_t)deposited_dao_cells[i].amount;
     if (amount != deposited_dao_cells[i].amount) {
+      return ERROR_OVERFLOW;
+      /* remove DAO cell occupied capacity */
+    }
+    if (__builtin_usubl_overflow(amount, DAO_OCCUPIED_CAPACITY, &amount)) {
       return ERROR_OVERFLOW;
     }
     if (__builtin_uaddl_overflow(total_deposited_dao, amount,

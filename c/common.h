@@ -389,11 +389,10 @@ int load_dao_header_data_by_cell(uint64_t i, uint64_t source,
   return CKB_SUCCESS;
 }
 
-int align_dao_compensation(size_t i, size_t source,
-                           dao_header_data_t align_target_data,
-                           uint64_t deposited_block_number,
-                           uint64_t original_capacity,
-                           uint64_t *calculated_capacity) {
+int align_dckb_cell(size_t i, size_t source,
+                    dao_header_data_t align_target_data,
+                    uint64_t deposited_block_number, uint64_t original_capacity,
+                    uint64_t *calculated_capacity) {
   dao_header_data_t deposit_data;
 
   /* new dckb */
@@ -425,7 +424,7 @@ int align_dao_compensation(size_t i, size_t source,
     return ERROR_DCKB_ALIGN;
   }
 
-  return calculate_dao_input_capacity(DAO_OCCUPIED_CAPACITY, deposit_data,
-                                      align_target_data, deposited_block_number,
-                                      original_capacity, calculated_capacity);
+  return calculate_dao_input_capacity(0, deposit_data, align_target_data,
+                                      deposited_block_number, original_capacity,
+                                      calculated_capacity);
 }

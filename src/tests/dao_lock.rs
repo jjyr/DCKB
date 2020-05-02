@@ -32,12 +32,8 @@ fn test_dao_lock_phase1_unlock() {
         dao_lock_script,
     );
     let input_dckb_amount = 123468105678u64;
-    let (dckb_cell, dckb_previous_out_point, dckb_cell_data) = gen_dckb_cell(
-        &mut data_loader,
-        input_dckb_amount,
-        0,
-        lock_args.clone(),
-    );
+    let (dckb_cell, dckb_previous_out_point, dckb_cell_data) =
+        gen_dckb_cell(&mut data_loader, input_dckb_amount, 0, lock_args.clone());
     let (fee_input_cell, fee_input_out_point) = gen_normal_cell(
         &mut data_loader,
         Capacity::shannons(SECP_OCCUPIED_CAPACITY),
@@ -103,9 +99,9 @@ fn test_dao_lock_phase1_unlock() {
     let resolved_inputs = vec![input_cell_meta, input_dckb_cell_meta, fee_input_cell_meta];
     let mut resolved_cell_deps = vec![];
 
-    let lock_proxy_cell_index: u8 = 1;
+    let custodian_cell_index: u8 = 1;
     let witness = WitnessArgs::new_builder()
-        .lock(Bytes::from(vec![lock_proxy_cell_index]).pack())
+        .lock(Bytes::from(vec![custodian_cell_index]).pack())
         .type_(Bytes::from(&0u8.to_le_bytes()[..]).pack())
         .build();
     let dckb_witness = WitnessArgs::new_builder()
@@ -145,7 +141,6 @@ fn test_dao_lock_phase1_unlock() {
 
 #[test]
 fn test_dao_lock_phase2_unlock() {
-    // in this test we simulate unlocking via proxy lock cell
     let mut data_loader = DummyDataLoader::new();
     let (privkey, lock_args) = gen_lock();
 
@@ -158,7 +153,12 @@ fn test_dao_lock_phase2_unlock() {
             .unpack(),
     );
     let original_dao_capacity = 123456780000u64;
-    let expected_withdraw_caapcity = calculate_dao_capacity(DAO_OCCUPIED_CAPACITY, &deposit_header, &withdraw_header, original_dao_capacity);
+    let expected_withdraw_caapcity = calculate_dao_capacity(
+        DAO_OCCUPIED_CAPACITY,
+        &deposit_header,
+        &withdraw_header,
+        original_dao_capacity,
+    );
     let (cell, previous_out_point) = gen_dao_cell(
         &mut data_loader,
         Capacity::shannons(original_dao_capacity),
@@ -189,11 +189,15 @@ fn test_dao_lock_phase2_unlock() {
         .lock(gen_secp256k1_lock_script(lock_args.clone()))
         .type_(Some(dckb_script()).pack())
         .build();
-    let dckb_change_data = dckb_data((input_dckb_amount + original_dao_capacity - expected_withdraw_caapcity).into(), withdraw_header.number());
-    let withdraw_cell = cell_output_with_only_capacity(original_dao_capacity - DCKB_CAPACITY.as_u64())
-        .as_builder()
-        .lock(gen_secp256k1_lock_script(lock_args.clone()))
-        .build();
+    let dckb_change_data = dckb_data(
+        (input_dckb_amount + original_dao_capacity - expected_withdraw_caapcity).into(),
+        withdraw_header.number(),
+    );
+    let withdraw_cell =
+        cell_output_with_only_capacity(original_dao_capacity - DCKB_CAPACITY.as_u64())
+            .as_builder()
+            .lock(gen_secp256k1_lock_script(lock_args.clone()))
+            .build();
 
     data_loader
         .headers
@@ -229,7 +233,7 @@ fn test_dao_lock_phase2_unlock() {
                 index: 0,
             })
             .build();
-    let input_lock_proxy_cell_meta =
+    let input_custodian_cell_meta =
         CellMetaBuilder::from_cell_output(custodian_cell, custodian_cell_data)
             .out_point(custodian_cell_out_point.clone())
             .transaction_info(TransactionInfo {
@@ -243,7 +247,7 @@ fn test_dao_lock_phase2_unlock() {
     let resolved_inputs = vec![
         input_cell_meta,
         input_dckb_cell_meta,
-        input_lock_proxy_cell_meta,
+        input_custodian_cell_meta,
     ];
     let mut resolved_cell_deps = vec![];
 

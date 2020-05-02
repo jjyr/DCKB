@@ -1,5 +1,5 @@
-mod dckb;
 mod dao_lock;
+mod dckb;
 
 use ckb_crypto::secp::Privkey;
 use ckb_script::DataLoader;
@@ -31,8 +31,7 @@ pub const DAO_OCCUPIED_CAPACITY: u64 = 146_00000000u64;
 
 lazy_static! {
     static ref DCKB: Bytes = Bytes::from(&include_bytes!("../../specs/cells/dckb")[..]);
-    static ref DAO_LOCK: Bytes =
-        Bytes::from(&include_bytes!("../../specs/cells/dao_lock")[..]);
+    static ref DAO_LOCK: Bytes = Bytes::from(&include_bytes!("../../specs/cells/dao_lock")[..]);
     static ref ALWAYS_SUCCESS: Bytes =
         Bytes::from(&include_bytes!("../../specs/cells/always_success")[..]);
     static ref DAO_BIN: Bytes = Bytes::from(

@@ -15,13 +15,18 @@ PROTOCOL_URL := https://raw.githubusercontent.com/nervosnetwork/ckb/${PROTOCOL_V
 BUILDER_DOCKER := nervos/ckb-riscv-gnu-toolchain@sha256:7b168b4b109a0f741078a71b7c4dddaf1d283a5244608f7851f5714fbad273ba
 
 build:
+	# build custodian_lock
+	make all-via-docker 
+	cargo build
+	# build dao_lock
 	make all-via-docker
 	cargo build
+	# build dckb
 	make all-via-docker
 	cargo build
 	make fmt
 
-all: specs/cells/dckb specs/cells/dao_lock specs/cells/always_success
+all: specs/cells/dckb specs/cells/dao_lock specs/cells/custodian_lock specs/cells/always_success
 
 all-via-docker: ${PROTOCOL_HEADER}
 	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make all"
@@ -31,12 +36,17 @@ specs/cells/always_success: c/always_success.c
 	$(OBJCOPY) --only-keep-debug $@ $(subst specs/cells,build,$@.debug)
 	$(OBJCOPY) --strip-debug --strip-all $@
 
-specs/cells/dckb: c/dckb.c ${PROTOCOL_HEADER} c/common.h c/const.h c/dao_utils.h
+specs/cells/dckb: c/dckb.c ${PROTOCOL_HEADER} c/common.h c/dao_lock.h c/dao_utils.h
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
 	$(OBJCOPY) --only-keep-debug $@ $(subst specs/cells,build,$@.debug)
 	$(OBJCOPY) --strip-debug --strip-all $@
 
-specs/cells/dao_lock: c/dao_lock.c ${PROTOCOL_HEADER} c/common.h c/dao_utils.h
+specs/cells/dao_lock: c/dao_lock.c ${PROTOCOL_HEADER} c/common.h c/custodian_lock.h c/dao_utils.h
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
+	$(OBJCOPY) --only-keep-debug $@ $(subst specs/cells,build,$@.debug)
+	$(OBJCOPY) --strip-debug --strip-all $@
+
+specs/cells/custodian_lock: c/custodian_lock.c ${PROTOCOL_HEADER} c/common.h
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
 	$(OBJCOPY) --only-keep-debug $@ $(subst specs/cells,build,$@.debug)
 	$(OBJCOPY) --strip-debug --strip-all $@
@@ -62,6 +72,7 @@ clean:
 	rm -rf specs/cells/always_success
 	rm -rf specs/cells/dckb
 	rm -rf specs/cells/dao_lock
+	rm -rf specs/cells/custodian_lock
 	rm -rf build/*.debug
 	cargo clean
 

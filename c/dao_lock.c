@@ -16,36 +16,29 @@
  *
  * phase1:
  * 1. check `inputs DCKB - outputs DCKB = X`.
- * 2. has one output cell that data set to first 8 bytes of the current
- * `script_hash` and has no type field, as the proxy lock cell.
+ * 2. has one output custodian cell which type is DCKB and lock is
+ * custodian_lock, and cell's dckb amount equals to X.
  *
  * phase2:
  * 1. check `inputs DCKB - outputs DCKB = Y`.
- * 2. has one input cell that has no type field, and created from the same
- * transaction of withdraw cell. or:
- * 2. the since field of inputs are set to a value which large or equals to
- * relatively `W` epochs.
+ * 2. has the custodian cell in phase1 as input.
  *
- * HINT: we use a proxy lock cell as ownership proof to break the restriction of
- * NervosDAO.
+ * HINT: we use the custodian cell to handle withdraw unlock and timeout, check
+ * custodian_lock for details.
  *
  * Script args:
- * This script accept 64 bytes args: <dckb type hash> | <lock hash>
+ * This script accept 64 bytes args: <dckb type hash> | <refund lock hash>
  * <dckb type hash>: blake2b(Script(hash_type: Type, code_hash: <dckb type id>))
- * <lock hash>: lock hash that receives the refund CKB
+ * <refund lock hash>: lock hash that receives the refund CKB
  *
  * Witness args:
  * This script expect a WitnessArgs and its lock:
- * <lock index>: a uint8 value to indicates proxy lock cell in phase1 and
- * phase2.
+ * <custodian index>: a uint8_t index refer to custodian cell.
  */
 
 #include "ckb_utils.h"
 #include "common.h"
-#include "const.h"
-
-/* since relative time 18 epochs(~ 72 hours) */
-#define PHASE2_TIMEOUT_SINCE 0xa000010000000012
+#include "custodian_lock.h"
 
 /* load dckb type hash from script.args */
 int load_dckb_type_hash(uint8_t dckb_type_hash[HASH_SIZE],
@@ -85,42 +78,13 @@ int load_dckb_type_hash(uint8_t dckb_type_hash[HASH_SIZE],
 
 /* load custodian cell index from witness_args.lock */
 int load_custodian_cell_index(uint8_t *index) {
-  int ret;
-  uint64_t len = 0;
-  uint8_t witness[MAX_WITNESS_SIZE];
-
-  len = MAX_WITNESS_SIZE;
-  ret = ckb_load_witness(witness, &len, 0, 0, CKB_SOURCE_GROUP_INPUT);
+  int ret = load_witness_lock_args(0, CKB_SOURCE_GROUP_INPUT, index, 1);
   if (ret == CKB_ITEM_MISSING) {
-    return ERROR_DL_NO_PROXY_CELL_INDEX;
+    return ERROR_DL_NO_CUSTODIAN_CELL_INDEX;
   }
   if (ret != CKB_SUCCESS) {
-    return ret;
+    return ERROR_DL_NO_CUSTODIAN_CELL_INDEX;
   }
-  if (len > MAX_WITNESS_SIZE) {
-    return ERROR_WITNESS_TOO_LONG;
-  }
-
-  mol_seg_t witness_seg;
-  witness_seg.ptr = (uint8_t *)witness;
-  witness_seg.size = len;
-
-  if (MolReader_WitnessArgs_verify(&witness_seg, false) != MOL_OK) {
-    return ERROR_LOAD_WITNESS_ARGS;
-  }
-  /* Load type args */
-  mol_seg_t lock_seg = MolReader_WitnessArgs_get_lock(&witness_seg);
-
-  if (MolReader_BytesOpt_is_none(&lock_seg)) {
-    return ERROR_DL_NO_PROXY_CELL_INDEX;
-  }
-
-  mol_seg_t lock_bytes_seg = MolReader_Bytes_raw_bytes(&lock_seg);
-  if (lock_bytes_seg.size != 1) {
-    return ERROR_DL_NO_PROXY_CELL_INDEX;
-  }
-
-  *index = *(uint8_t *)lock_bytes_seg.ptr;
   return CKB_SUCCESS;
 }
 
@@ -134,14 +98,14 @@ int check_custodian_cell(uint8_t dckb_type_hash[HASH_SIZE], uint64_t i,
   int ret = ckb_checked_load_cell_by_field(type_hash, &len, 0, i, source,
                                            CKB_CELL_FIELD_TYPE_HASH);
   if (ret == CKB_ITEM_MISSING) {
-    return ERROR_DL_INVALID_PROXY_LOCK;
+    return ERROR_DL_INVALID_CUSTODIAN_CELL;
   }
   if (ret != CKB_SUCCESS || len != HASH_SIZE) {
     return ERROR_ENCODING;
   }
   ret = memcmp(type_hash, dckb_type_hash, HASH_SIZE);
   if (ret != 0) {
-    return ERROR_DL_INVALID_PROXY_LOCK;
+    return ERROR_DL_INVALID_CUSTODIAN_CELL;
   }
   /* check cell lock must be custodian_lock */
   uint8_t lock_buf[MAX_SCRIPT_SIZE];
@@ -169,11 +133,11 @@ int check_custodian_cell(uint8_t dckb_type_hash[HASH_SIZE], uint64_t i,
   }
 
   if (*(hash_type_seg.ptr) != HASH_TYPE_DATA) {
-    return ERROR_DL_INVALID_PROXY_LOCK;
+    return ERROR_DL_INVALID_CUSTODIAN_CELL;
   }
   ret = memcmp(code_hash_seg.ptr, CUSTODIAN_LOCK_CODE_HASH, HASH_SIZE);
   if (ret != 0) {
-    return ERROR_DL_INVALID_PROXY_LOCK;
+    return ERROR_DL_INVALID_CUSTODIAN_CELL;
   }
   return CKB_SUCCESS;
 }
@@ -315,8 +279,8 @@ int load_out_point_seg(uint64_t i, uint64_t source, uint8_t buf[OUT_POINT_SIZE],
   return CKB_SUCCESS;
 }
 
-/* phase1 should output one proxy cell
- * 1. proxy cell should be validity
+/* phase1 should output one custodian cell
+ * 1. custodian cell should be validity
  * 2. DCKB amount should satisfied expected custodian amount
  */
 int check_phase1_custodian_cell(uint8_t dckb_type_hash[HASH_SIZE],
@@ -334,13 +298,13 @@ int check_phase1_custodian_cell(uint8_t dckb_type_hash[HASH_SIZE],
   uint64_t len = BLOCK_NUM_LEN + UDT_LEN;
   ret = ckb_load_cell_data(buf, &len, 0, custodian_cell_i, CKB_SOURCE_OUTPUT);
   if (ret != CKB_SUCCESS || len != UDT_LEN + BLOCK_NUM_LEN) {
-    return ERROR_DL_INVALID_PROXY_LOCK;
+    return ERROR_DL_INVALID_CUSTODIAN_CELL;
   }
   uint128_t amount;
   uint64_t block_number;
   ret = parse_dckb_data(&amount, &block_number, buf, len);
   if (ret != CKB_SUCCESS) {
-    return ERROR_DL_INVALID_PROXY_LOCK;
+    return ERROR_DL_INVALID_CUSTODIAN_CELL;
   }
   if (amount != expected_custodian_amount) {
     return ERROR_DL_INCORRECT_DESTROY_AMOUNT;
@@ -395,7 +359,7 @@ int check_phase2_custodian_cell(uint8_t dckb_type_hash[HASH_SIZE],
     }
     ret = memcmp(custodian_cell_tx_hash, tx_hash_seg.ptr, HASH_SIZE);
     if (ret != 0) {
-      return ERROR_DL_INVALID_PROXY_LOCK_TX_HASH;
+      return ERROR_DL_MISMATCH_CUSTODIAN_CELL_TX_HASH;
     }
 
     i++;
@@ -468,7 +432,7 @@ int check_destroy_dckb_amount(uint8_t dckb_type_hash[HASH_SIZE],
   /* fetch inputs */
   int input_dckb_cells_cnt;
   TokenInfo input_dckb_cells[MAX_SWAP_CELLS];
-  int ret = fetch_inputs(dckb_type_hash, NULL, NULL, NULL, NULL,
+  int ret = fetch_inputs(dckb_type_hash, NULL, NULL, NULL, NULL, NULL,
                          &input_dckb_cells_cnt, input_dckb_cells);
   printf("fetch inputs ret %d", ret);
   if (ret != CKB_SUCCESS) {
@@ -477,7 +441,7 @@ int check_destroy_dckb_amount(uint8_t dckb_type_hash[HASH_SIZE],
   /* fetch outputs */
   int output_dckb_cells_cnt;
   TokenInfo output_dckb_cells[MAX_SWAP_CELLS];
-  ret = fetch_outputs(dckb_type_hash, NULL, NULL, NULL, NULL,
+  ret = fetch_outputs(dckb_type_hash, NULL, NULL, NULL, NULL, NULL,
                       &output_dckb_cells_cnt, output_dckb_cells);
   printf("fetch outputs ret %d", ret);
   if (ret != CKB_SUCCESS) {

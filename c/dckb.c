@@ -50,7 +50,7 @@
 #include "blake2b.h"
 #include "ckb_syscalls.h"
 #include "common.h"
-#include "const.h"
+#include "dao_lock.h"
 #include "protocol.h"
 #include "stdio.h"
 
@@ -79,8 +79,8 @@ int main() {
   /* fetch inputs */
   TokenInfo input_dckb_cells[MAX_SWAP_CELLS];
   int input_dckb_cells_cnt;
-  ret = fetch_inputs(type_hash, NULL, NULL, NULL, NULL, &input_dckb_cells_cnt,
-                     input_dckb_cells);
+  ret = fetch_inputs(type_hash, DAO_LOCK_CODE_HASH, NULL, NULL, NULL, NULL,
+                     &input_dckb_cells_cnt, input_dckb_cells);
   printf("fetch inputs ret %d", ret);
   if (ret != CKB_SUCCESS) {
     return ret;
@@ -92,9 +92,10 @@ int main() {
   SwapInfo output_new_dckb_cells[MAX_SWAP_CELLS];
   int output_dckb_cells_cnt = 0;
   TokenInfo output_dckb_cells[MAX_SWAP_CELLS];
-  ret = fetch_outputs(type_hash, &deposited_dao_cells_cnt, deposited_dao_cells,
-                      &output_new_dckb_cells_cnt, output_new_dckb_cells,
-                      &output_dckb_cells_cnt, output_dckb_cells);
+  ret = fetch_outputs(type_hash, DAO_LOCK_CODE_HASH, &deposited_dao_cells_cnt,
+                      deposited_dao_cells, &output_new_dckb_cells_cnt,
+                      output_new_dckb_cells, &output_dckb_cells_cnt,
+                      output_dckb_cells);
   printf("fetch outputs ret %d", ret);
   if (ret != CKB_SUCCESS) {
     return ret;

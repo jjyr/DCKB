@@ -13,7 +13,6 @@ use ckb_types::{
 
 #[test]
 fn test_dao_lock_phase1_unlock() {
-    // we simulate unlocking via proxy lock cell
     let mut data_loader = DummyDataLoader::new();
     let (privkey, lock_args) = gen_lock();
 

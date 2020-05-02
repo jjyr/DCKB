@@ -28,6 +28,7 @@ typedef unsigned __int128 uint128_t;
 #define ERROR_LOAD_OUT_POINT -70
 #define ERROR_LOAD_ALIGN_TARGET -71
 #define ERROR_INCORRECT_DAO_LOCK -72
+#define ERROR_DAO_LOCK_CHECK -73
 
 /* dckb errors */
 #define ERROR_DCKB_INCORRECT_OUTPUT -30
@@ -36,16 +37,18 @@ typedef unsigned __int128 uint128_t;
 #define ERROR_DCKB_ALIGN -33
 #define ERROR_DCKB_OUTPUT_ALIGN -34
 
-/* unlock_deposit errors */
+/* dao lock errors */
 #define ERROR_DL_CONFLICT_WITHDRAW_PHASE -40
 #define ERROR_DL_CONFLICT_DAO_TYPE_HASH -41
-#define ERROR_DL_NO_PROXY_CELL_INDEX -42
+#define ERROR_DL_NO_CUSTODIAN_CELL_INDEX -42
 #define ERROR_DL_INCORRECT_DESTROY_AMOUNT -43
-#define ERROR_DL_INVALID_PROXY_LOCK -44
-#define ERROR_DL_INVALID_PROXY_LOCK_TX_HASH -45
+#define ERROR_DL_INVALID_CUSTODIAN_CELL -44
+#define ERROR_DL_MISMATCH_CUSTODIAN_CELL_TX_HASH -45
 #define ERROR_DL_INVALID_SINCE -46
-#define ERROR_DL_MULTIPLE_PROXY_LOCK -47
-#define ERROR_DL_REFUND_CKB_NOT_ENOUGH -48
+#define ERROR_DL_REFUND_CKB_NOT_ENOUGH -47
+
+/* custodian lock errors */
+#define ERROR_CL_MISMATCH_LOCK_HASH -80
 
 #define MAX_SCRIPT_SIZE 32768
 #define MAX_HEADER_SIZE 32768
@@ -53,7 +56,6 @@ typedef unsigned __int128 uint128_t;
 
 /* Contract related */
 #define MAX_SWAP_CELLS 256
-#define PROXY_LOCK_CELL_DATA_LEN 8
 #define CKB_LEN 8
 #define SINCE_LEN 8
 #define BLOCK_NUM_LEN 8
@@ -65,7 +67,6 @@ typedef unsigned __int128 uint128_t;
 #define HASH_TYPE_TYPE_ID 1
 
 #include "ckb_syscalls.h"
-#include "const.h"
 #include "dao_utils.h"
 #include "protocol.h"
 #include "stdio.h"
@@ -90,7 +91,11 @@ int parse_dckb_data(uint128_t *amount, uint64_t *block_number, uint8_t *data,
   return CKB_SUCCESS;
 }
 
-int check_dao_lock(uint64_t i, uint64_t source) {
+int check_dao_lock(const uint8_t dao_lock_code_hash[HASH_SIZE], uint64_t i,
+                   uint64_t source) {
+  if (dao_lock_code_hash == NULL) {
+    return ERROR_DAO_LOCK_CHECK;
+  }
   uint8_t script[MAX_SCRIPT_SIZE];
   uint64_t len = MAX_SCRIPT_SIZE;
   int ret = ckb_checked_load_cell_by_field(script, &len, 0, i, source,
@@ -109,7 +114,7 @@ int check_dao_lock(uint64_t i, uint64_t source) {
   mol_seg_t args_seg = MolReader_Script_get_args(&script_seg);
   mol_seg_t raw_args_seg = MolReader_Bytes_raw_bytes(&args_seg);
   /* check code hash */
-  ret = memcmp(code_hash_seg.ptr, DAO_LOCK_CODE_HASH, HASH_SIZE);
+  ret = memcmp(code_hash_seg.ptr, dao_lock_code_hash, HASH_SIZE);
   if (ret != 0) {
     printf("unexpected deposit lock code hash");
     return ERROR_INCORRECT_DAO_LOCK;
@@ -140,6 +145,7 @@ int check_dao_lock(uint64_t i, uint64_t source) {
 
 /* fetch inputs coins */
 int fetch_inputs(const uint8_t dckb_type_hash[HASH_SIZE],
+                 const uint8_t dao_lock_code_hash[HASH_SIZE],
                  int *withdraw1_dao_cnt,
                  TokenInfo withdraw1_dao_infos[MAX_SWAP_CELLS],
                  int *withdraw2_dao_cnt,
@@ -182,7 +188,7 @@ int fetch_inputs(const uint8_t dckb_type_hash[HASH_SIZE],
     if (is_dao) {
       printf("check a new withdraw cell");
       /* only count deposit lock dao cells */
-      ret = check_dao_lock(i, CKB_SOURCE_INPUT);
+      ret = check_dao_lock(dao_lock_code_hash, i, CKB_SOURCE_INPUT);
       printf("check deposit lock ret %d", ret);
       if (ret != CKB_SUCCESS) {
         goto next;
@@ -240,6 +246,7 @@ int fetch_inputs(const uint8_t dckb_type_hash[HASH_SIZE],
 
 /* fetch outputs coins */
 int fetch_outputs(const uint8_t dckb_type_hash[HASH_SIZE],
+                  const uint8_t dao_lock_code_hash[HASH_SIZE],
                   int *deposited_dao_cnt,
                   SwapInfo deposited_dao[MAX_SWAP_CELLS],
                   int *new_dckb_cell_cnt,
@@ -282,7 +289,7 @@ int fetch_outputs(const uint8_t dckb_type_hash[HASH_SIZE],
       printf("check a new deposit cell");
       if (!deposited_dao_cnt || !deposited_dao) goto next;
       /* only count deposit lock dao cells */
-      ret = check_dao_lock(i, CKB_SOURCE_OUTPUT);
+      ret = check_dao_lock(dao_lock_code_hash, i, CKB_SOURCE_OUTPUT);
       printf("check deposit lock ret %d", ret);
       if (ret != CKB_SUCCESS) {
         goto next;
@@ -339,6 +346,41 @@ int fetch_outputs(const uint8_t dckb_type_hash[HASH_SIZE],
   next:
     i++;
   }
+  return CKB_SUCCESS;
+}
+
+int load_witness_lock_args(uint64_t index, uint64_t source, uint8_t *lock_arg,
+                           size_t lock_arg_len) {
+  int ret;
+  uint64_t len = MAX_WITNESS_SIZE;
+  uint8_t witness[MAX_WITNESS_SIZE];
+  ret = ckb_load_witness(witness, &len, 0, index, source);
+  if (ret != CKB_SUCCESS) {
+    return ret;
+  }
+  if (len > MAX_WITNESS_SIZE) {
+    return ERROR_WITNESS_TOO_LONG;
+  }
+
+  mol_seg_t witness_seg;
+  witness_seg.ptr = (uint8_t *)witness;
+  witness_seg.size = len;
+
+  if (MolReader_WitnessArgs_verify(&witness_seg, false) != MOL_OK) {
+    return ERROR_LOAD_WITNESS_ARGS;
+  }
+  /* Load type args */
+  mol_seg_t lock_seg = MolReader_WitnessArgs_get_lock(&witness_seg);
+
+  if (MolReader_BytesOpt_is_none(&lock_seg)) {
+    return ERROR_LOAD_WITNESS_ARGS;
+  }
+
+  mol_seg_t lock_bytes_seg = MolReader_Bytes_raw_bytes(&lock_seg);
+  if (lock_bytes_seg.size != lock_arg_len) {
+    return ERROR_LOAD_WITNESS_ARGS;
+  }
+  memcpy(lock_arg, lock_bytes_seg.ptr, lock_arg_len);
   return CKB_SUCCESS;
 }
 

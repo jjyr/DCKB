@@ -27,7 +27,7 @@ typedef unsigned __int128 uint128_t;
 #define ERROR_LOAD_HEADER_INDEX -69
 #define ERROR_LOAD_OUT_POINT -70
 #define ERROR_LOAD_ALIGN_TARGET -71
-#define ERROR_INCORRECT_DEPOSIT_LOCK -72
+#define ERROR_INCORRECT_DAO_LOCK -72
 
 /* dckb errors */
 #define ERROR_DCKB_INCORRECT_OUTPUT -30
@@ -78,7 +78,7 @@ typedef struct {
   uint32_t cell_index;
 } TokenInfo;
 
-int check_deposit_lock(uint64_t i, uint64_t source) {
+int check_dao_lock(uint64_t i, uint64_t source) {
   uint8_t script[MAX_SCRIPT_SIZE];
   uint64_t len = MAX_SCRIPT_SIZE;
   int ret = ckb_checked_load_cell_by_field(script, &len, 0, i, source,
@@ -97,20 +97,20 @@ int check_deposit_lock(uint64_t i, uint64_t source) {
   mol_seg_t args_seg = MolReader_Script_get_args(&script_seg);
   mol_seg_t raw_args_seg = MolReader_Bytes_raw_bytes(&args_seg);
   /* check code hash */
-  ret = memcmp(code_hash_seg.ptr, DEPOSIT_LOCK_CODE_HASH, HASH_SIZE);
+  ret = memcmp(code_hash_seg.ptr, DAO_LOCK_CODE_HASH, HASH_SIZE);
   if (ret != 0) {
     printf("unexpected deposit lock code hash");
-    return ERROR_INCORRECT_DEPOSIT_LOCK;
+    return ERROR_INCORRECT_DAO_LOCK;
   }
   /* check hash type */
   if (*hash_type_seg.ptr != 0) {
     printf("unexpected deposit lock hash type");
-    return ERROR_INCORRECT_DEPOSIT_LOCK;
+    return ERROR_INCORRECT_DAO_LOCK;
   }
   /* check args */
   if (raw_args_seg.size != HASH_SIZE * 2) {
     printf("unexpected deposit args size %d", raw_args_seg.size);
-    return ERROR_INCORRECT_DEPOSIT_LOCK;
+    return ERROR_INCORRECT_DAO_LOCK;
   }
   uint8_t script_hash[HASH_SIZE];
   len = HASH_SIZE;
@@ -121,7 +121,7 @@ int check_deposit_lock(uint64_t i, uint64_t source) {
   ret = memcmp(script_hash, raw_args_seg.ptr, HASH_SIZE);
   if (ret != 0) {
     printf("unexpected deposit lock args");
-    return ERROR_INCORRECT_DEPOSIT_LOCK;
+    return ERROR_INCORRECT_DAO_LOCK;
   }
   return CKB_SUCCESS;
 }
@@ -170,7 +170,7 @@ int fetch_inputs(const uint8_t dckb_type_hash[HASH_SIZE],
     if (is_dao) {
       printf("check a new withdraw cell");
       /* only count deposit lock dao cells */
-      ret = check_deposit_lock(i, CKB_SOURCE_INPUT);
+      ret = check_dao_lock(i, CKB_SOURCE_INPUT);
       printf("check deposit lock ret %d", ret);
       if (ret != CKB_SUCCESS) {
         goto next;
@@ -271,7 +271,7 @@ int fetch_outputs(const uint8_t dckb_type_hash[HASH_SIZE],
       printf("check a new deposit cell");
       if (!deposited_dao_cnt || !deposited_dao) goto next;
       /* only count deposit lock dao cells */
-      ret = check_deposit_lock(i, CKB_SOURCE_OUTPUT);
+      ret = check_dao_lock(i, CKB_SOURCE_OUTPUT);
       printf("check deposit lock ret %d", ret);
       if (ret != CKB_SUCCESS) {
         goto next;

@@ -1,5 +1,5 @@
 mod dckb;
-mod deposit_lock;
+mod dao_lock;
 
 use ckb_crypto::secp::Privkey;
 use ckb_script::DataLoader;
@@ -31,8 +31,8 @@ pub const DAO_OCCUPIED_CAPACITY: u64 = 146_00000000u64;
 
 lazy_static! {
     static ref DCKB: Bytes = Bytes::from(&include_bytes!("../../specs/cells/dckb")[..]);
-    static ref DEPOSIT_LOCK: Bytes =
-        Bytes::from(&include_bytes!("../../specs/cells/deposit_lock")[..]);
+    static ref DAO_LOCK: Bytes =
+        Bytes::from(&include_bytes!("../../specs/cells/dao_lock")[..]);
     static ref ALWAYS_SUCCESS: Bytes =
         Bytes::from(&include_bytes!("../../specs/cells/always_success")[..]);
     static ref DAO_BIN: Bytes = Bytes::from(
@@ -218,8 +218,8 @@ fn secp_code_hash() -> Byte32 {
     CellOutput::calc_data_hash(&SIGHASH_ALL_BIN)
 }
 
-fn deposit_lock_code_hash() -> Byte32 {
-    CellOutput::calc_data_hash(&DEPOSIT_LOCK)
+fn dao_lock_code_hash() -> Byte32 {
+    CellOutput::calc_data_hash(&DAO_LOCK)
 }
 
 fn dao_type_id_script() -> Script {
@@ -355,7 +355,7 @@ fn gen_secp256k1_lock_script(lock_args: Bytes) -> Script {
         .build()
 }
 
-fn gen_deposit_lock_lock_script(lock_hash: [u8; 32]) -> Script {
+fn gen_dao_lock_lock_script(lock_hash: [u8; 32]) -> Script {
     let args: [u8; 64] = {
         let mut args = [0u8; 64];
         let dckb_type_hash: [u8; 32] = Script::calc_script_hash(&dckb_script()).unpack();
@@ -365,7 +365,7 @@ fn gen_deposit_lock_lock_script(lock_hash: [u8; 32]) -> Script {
     };
     Script::new_builder()
         .args(Bytes::from(args.to_vec()).pack())
-        .code_hash(deposit_lock_code_hash())
+        .code_hash(dao_lock_code_hash())
         .hash_type(ScriptHashType::Data.into())
         .build()
 }
@@ -388,7 +388,7 @@ fn complete_tx(
         )
     };
     let (dckb_cell, dckb_out_point) = script_cell(&DCKB);
-    let (deposit_lock_cell, deposit_lock_out_point) = script_cell(&DEPOSIT_LOCK);
+    let (dao_lock_cell, dao_lock_out_point) = script_cell(&DAO_LOCK);
 
     let secp_cell_meta =
         CellMetaBuilder::from_cell_output(secp_cell.clone(), SIGHASH_ALL_BIN.clone())
@@ -404,9 +404,9 @@ fn complete_tx(
     let dckb_cell_meta = CellMetaBuilder::from_cell_output(dckb_cell.clone(), DCKB.clone())
         .out_point(dckb_out_point.clone())
         .build();
-    let deposit_lock_cell_meta =
-        CellMetaBuilder::from_cell_output(deposit_lock_cell.clone(), DEPOSIT_LOCK.clone())
-            .out_point(deposit_lock_out_point.clone())
+    let dao_lock_cell_meta =
+        CellMetaBuilder::from_cell_output(dao_lock_cell.clone(), DAO_LOCK.clone())
+            .out_point(dao_lock_out_point.clone())
             .build();
 
     dummy
@@ -423,8 +423,8 @@ fn complete_tx(
         .cells
         .insert(dckb_out_point.clone(), (dckb_cell, DCKB.clone()));
     dummy.cells.insert(
-        deposit_lock_out_point.clone(),
-        (deposit_lock_cell, DEPOSIT_LOCK.clone()),
+        dao_lock_out_point.clone(),
+        (dao_lock_cell, DAO_LOCK.clone()),
     );
 
     let tx = builder
@@ -454,7 +454,7 @@ fn complete_tx(
         )
         .cell_dep(
             CellDep::new_builder()
-                .out_point(deposit_lock_out_point)
+                .out_point(dao_lock_out_point)
                 .dep_type(DepType::Code.into())
                 .build(),
         )
@@ -465,7 +465,7 @@ fn complete_tx(
     resolved_cell_deps.push(secp_data_cell_meta);
     resolved_cell_deps.push(dao_cell_meta);
     resolved_cell_deps.push(dckb_cell_meta);
-    resolved_cell_deps.push(deposit_lock_cell_meta);
+    resolved_cell_deps.push(dao_lock_cell_meta);
 
     (tx, resolved_cell_deps)
 }

@@ -9,12 +9,12 @@ const PATH_PREFIX: &str = "specs/cells/";
 const BUF_SIZE: usize = 8 * 1024;
 const CKB_HASH_PERSONALIZATION: &[u8] = b"ckb-default-hash";
 
-const BINARIES: &[&str] = &["dckb", "deposit_lock"];
+const BINARIES: &[&str] = &["dckb", "dao_lock"];
 
-fn gen_const(deposit_lock_code_hash: [u8; 32]) {
+fn gen_const(dao_lock_code_hash: [u8; 32]) {
     let s = format!(
         "{{{}}}",
-        deposit_lock_code_hash
+        dao_lock_code_hash
             .iter()
             .map(|i| format!("{}", i))
             .collect::<Vec<_>>()
@@ -33,10 +33,10 @@ fn gen_const(deposit_lock_code_hash: [u8; 32]) {
 #define DCKB_CONST_H
 
 /* Code hash of DepositLock */
-const uint8_t DEPOSIT_LOCK_CODE_HASH[] = {deposit_lock_code_hash};
+const uint8_t DAO_LOCK_CODE_HASH[] = {dao_lock_code_hash};
 #endif
 "#,
-            deposit_lock_code_hash = s
+            dao_lock_code_hash = s
         )
         .into_bytes(),
     )
@@ -62,8 +62,8 @@ fn read_hash(name: &str) -> [u8; 32] {
 }
 
 fn main() {
-    let deposit_lock_code_hash = read_hash("deposit_lock");
-    gen_const(deposit_lock_code_hash);
+    let dao_lock_code_hash = read_hash("dao_lock");
+    gen_const(dao_lock_code_hash);
     let mut f = fs::OpenOptions::new()
         .write(true)
         .truncate(true)

@@ -12,7 +12,7 @@ use ckb_types::{
 };
 
 #[test]
-fn test_deposit_lock_phase1_unlock() {
+fn test_dao_lock_phase1_unlock() {
     // we simulate unlocking via proxy lock cell
     let mut data_loader = DummyDataLoader::new();
     let (privkey, lock_args) = gen_lock();
@@ -21,19 +21,19 @@ fn test_deposit_lock_phase1_unlock() {
     let (withdraw_header, withdraw_epoch) = gen_header(2000610, 10001000, 575, 2000000, 1100);
 
     // inputs cells
-    let deposit_lock_script = gen_deposit_lock_lock_script(
+    let dao_lock_script = gen_dao_lock_lock_script(
         gen_secp256k1_lock_script(lock_args.clone())
             .calc_script_hash()
             .unpack(),
     );
     let proxy_lock_data: Bytes = {
-        let deposit_lock_script_hash: [u8; 32] = deposit_lock_script.calc_script_hash().unpack();
-        deposit_lock_script_hash[..8].to_vec().into()
+        let dao_lock_script_hash: [u8; 32] = dao_lock_script.calc_script_hash().unpack();
+        dao_lock_script_hash[..8].to_vec().into()
     };
     let (cell, previous_out_point) = gen_dao_cell(
         &mut data_loader,
         Capacity::shannons(123456780000),
-        deposit_lock_script,
+        dao_lock_script,
     );
     let (dckb_cell, dckb_previous_out_point, dckb_cell_data) = gen_dckb_cell(
         &mut data_loader,
@@ -141,7 +141,7 @@ fn test_deposit_lock_phase1_unlock() {
 }
 
 #[test]
-fn test_deposit_lock_phase2_unlock() {
+fn test_dao_lock_phase2_unlock() {
     // in this test we simulate unlocking via proxy lock cell
     let mut data_loader = DummyDataLoader::new();
     let (privkey, lock_args) = gen_lock();
@@ -149,19 +149,19 @@ fn test_deposit_lock_phase2_unlock() {
     let (deposit_header, deposit_epoch) = gen_header(1554, 10000000, 35, 1000, 1000);
     let (withdraw_header, withdraw_epoch) = gen_header(2000610, 10001000, 575, 2000000, 1100);
     // inputs
-    let deposit_lock_script = gen_deposit_lock_lock_script(
+    let dao_lock_script = gen_dao_lock_lock_script(
         gen_secp256k1_lock_script(lock_args.clone())
             .calc_script_hash()
             .unpack(),
     );
     let proxy_lock_data: Bytes = {
-        let deposit_lock_script_hash: [u8; 32] = deposit_lock_script.calc_script_hash().unpack();
-        deposit_lock_script_hash[..8].to_vec().into()
+        let dao_lock_script_hash: [u8; 32] = dao_lock_script.calc_script_hash().unpack();
+        dao_lock_script_hash[..8].to_vec().into()
     };
     let (cell, previous_out_point) = gen_dao_cell(
         &mut data_loader,
         Capacity::shannons(123456780000),
-        deposit_lock_script,
+        dao_lock_script,
     );
     let total_dckb = 123468105678;
     let (dckb_cell, dckb_previous_out_point, dckb_cell_data) = gen_dckb_cell(

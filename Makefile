@@ -19,8 +19,9 @@ build:
 	cargo build
 	make all-via-docker
 	cargo build
+	make fmt
 
-all: specs/cells/dckb specs/cells/deposit_lock specs/cells/always_success
+all: specs/cells/dckb specs/cells/dao_lock specs/cells/always_success
 
 all-via-docker: ${PROTOCOL_HEADER}
 	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make all"
@@ -35,7 +36,7 @@ specs/cells/dckb: c/dckb.c ${PROTOCOL_HEADER} c/common.h c/const.h c/dao_utils.h
 	$(OBJCOPY) --only-keep-debug $@ $(subst specs/cells,build,$@.debug)
 	$(OBJCOPY) --strip-debug --strip-all $@
 
-specs/cells/deposit_lock: c/deposit_lock.c ${PROTOCOL_HEADER} c/common.h c/dao_utils.h
+specs/cells/dao_lock: c/dao_lock.c ${PROTOCOL_HEADER} c/common.h c/dao_utils.h
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
 	$(OBJCOPY) --only-keep-debug $@ $(subst specs/cells,build,$@.debug)
 	$(OBJCOPY) --strip-debug --strip-all $@
@@ -60,7 +61,7 @@ install-tools:
 clean:
 	rm -rf specs/cells/always_success
 	rm -rf specs/cells/dckb
-	rm -rf specs/cells/deposit_lock
+	rm -rf specs/cells/dao_lock
 	rm -rf build/*.debug
 	cargo clean
 
@@ -68,6 +69,9 @@ dist: clean all
 
 fmt:
 	clang-format -i -style=Google $(wildcard *.h */*.h *.c */*.c)
+
+check-fmt:
+	make fmt
 	git diff --exit-code
 
-.PHONY: all all-via-docker dist clean fmt build
+.PHONY: all all-via-docker dist clean fmt check-fmt build

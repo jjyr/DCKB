@@ -97,6 +97,7 @@ int check_custodian_cell(uint8_t dckb_type_hash[HASH_SIZE], uint64_t i,
   /* check cell type must be DCKB */
   int ret = ckb_checked_load_cell_by_field(type_hash, &len, 0, i, source,
                                            CKB_CELL_FIELD_TYPE_HASH);
+  printf("check load custodian type hash ret %i", ret);
   if (ret == CKB_ITEM_MISSING) {
     return ERROR_DL_INVALID_CUSTODIAN_CELL;
   }
@@ -104,6 +105,7 @@ int check_custodian_cell(uint8_t dckb_type_hash[HASH_SIZE], uint64_t i,
     return ERROR_ENCODING;
   }
   ret = memcmp(type_hash, dckb_type_hash, HASH_SIZE);
+  printf("check custodian type ret %i", ret);
   if (ret != 0) {
     return ERROR_DL_INVALID_CUSTODIAN_CELL;
   }
@@ -133,10 +135,12 @@ int check_custodian_cell(uint8_t dckb_type_hash[HASH_SIZE], uint64_t i,
   }
 
   if (*(hash_type_seg.ptr) != HASH_TYPE_DATA) {
+    printf("custodian lock hash type error");
     return ERROR_DL_INVALID_CUSTODIAN_CELL;
   }
   ret = memcmp(code_hash_seg.ptr, CUSTODIAN_LOCK_CODE_HASH, HASH_SIZE);
   if (ret != 0) {
+    printf("custodian lock code hash error");
     return ERROR_DL_INVALID_CUSTODIAN_CELL;
   }
   return CKB_SUCCESS;
@@ -289,7 +293,7 @@ int check_phase1_custodian_cell(uint8_t dckb_type_hash[HASH_SIZE],
   /* check custodian cell */
   int ret =
       check_custodian_cell(dckb_type_hash, custodian_cell_i, CKB_SOURCE_OUTPUT);
-  printf("check custodian cell ret %d", ret);
+  printf("phase1 check custodian cell ret %d", ret);
   if (ret != CKB_SUCCESS) {
     return ret;
   }
@@ -321,7 +325,7 @@ int check_phase2_custodian_cell(uint8_t dckb_type_hash[HASH_SIZE],
   /* check custodian cell */
   int ret =
       check_custodian_cell(dckb_type_hash, custodian_cell_i, CKB_SOURCE_INPUT);
-  printf("check custodian cell ret %d", ret);
+  printf("phase2 check custodian cell i %ld ret %d", custodian_cell_i, ret);
   if (ret != CKB_SUCCESS) {
     return ret;
   }

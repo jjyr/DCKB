@@ -61,7 +61,7 @@ typedef unsigned __int128 uint128_t;
 #define BLOCK_NUM_LEN 8
 #define UDT_LEN 16
 #define HASH_SIZE 32
-#define DAO_OCCUPIED_CAPACITY 14600000000         // 146 Bytes
+#define DAO_OCCUPIED_CAPACITY 14600000000          // 146 Bytes
 #define MAX_DEPOSIT_DAO_CAPACITY 1000000000000000  // 10_000_000 CKB
 #define HASH_TYPE_DATA 0
 #define HASH_TYPE_TYPE_ID 1

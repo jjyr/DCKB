@@ -25,9 +25,9 @@ fn test_dckb_withdraw() {
     );
     let (dckb_cell, dckb_previous_out_point, dckb_cell_data) = gen_dckb_cell(
         &mut data_loader,
-        Capacity::shannons(123468105678),
-        lock_args,
+        123468105678,
         0,
+        lock_args,
     );
 
     data_loader
@@ -121,15 +121,15 @@ fn test_dckb_transfer() {
     let (header2, header2_epoch) = gen_header(2000610, ar2, 575, 2000000, 1100);
     let (dckb_cell1, dckb_previous_out_point1, dckb_cell_data1) = gen_dckb_cell(
         &mut data_loader,
-        Capacity::shannons(sender_coin),
-        lock_args.clone(),
+        sender_coin,
         0,
+        lock_args.clone(),
     );
     let (dckb_cell2, dckb_previous_out_point2, dckb_cell_data2) = gen_dckb_cell(
         &mut data_loader,
-        Capacity::shannons(receiver_coin),
-        lock_args,
+        receiver_coin,
         1554,
+        lock_args,
     );
 
     data_loader.headers.insert(header1.hash(), header1.clone());
@@ -261,11 +261,9 @@ fn test_dckb_deposit() {
     );
     let (dckb_output_cell, _, dckb_output_data) = gen_dckb_cell(
         &mut data_loader,
-        Capacity::shannons(
             123456780000 - DAO_OCCUPIED_CAPACITY - DCKB_CAPACITY.as_u64() - change_coin,
-        ),
-        lock_args,
         0,
+        lock_args,
     );
 
     let b = [0; 8];

@@ -26,12 +26,15 @@ use rand::{thread_rng, Rng};
 pub const MAX_CYCLES: u64 = std::u64::MAX;
 pub const SIGNATURE_SIZE: usize = 65;
 pub const DAO_OCCUPIED_CAPACITY: u64 = 146_00000000u64;
+pub const SECP_OCCUPIED_CAPACITY: u64 = 61_00000000u64;
 
 // errors
 
 lazy_static! {
     static ref DCKB: Bytes = Bytes::from(&include_bytes!("../../specs/cells/dckb")[..]);
     static ref DAO_LOCK: Bytes = Bytes::from(&include_bytes!("../../specs/cells/dao_lock")[..]);
+    static ref CUSTODIAN_LOCK: Bytes =
+        Bytes::from(&include_bytes!("../../specs/cells/custodian_lock")[..]);
     static ref ALWAYS_SUCCESS: Bytes =
         Bytes::from(&include_bytes!("../../specs/cells/always_success")[..]);
     static ref DAO_BIN: Bytes = Bytes::from(
@@ -213,6 +216,10 @@ fn script_cell(script_data: &Bytes) -> (CellOutput, OutPoint) {
     (cell, out_point)
 }
 
+fn custodian_code_hash() -> Byte32 {
+    CellOutput::calc_data_hash(&CUSTODIAN_LOCK)
+}
+
 fn secp_code_hash() -> Byte32 {
     CellOutput::calc_data_hash(&SIGHASH_ALL_BIN)
 }
@@ -264,11 +271,31 @@ fn gen_normal_cell(
     (cell, out_point)
 }
 
+fn gen_custodian_cell(
+    dummy: &mut DummyDataLoader,
+    dckb_amount: u64,
+    height: BlockNumber,
+    lock_args: Bytes,
+    out_point: OutPoint,
+) -> (CellOutput, Bytes) {
+    let cell = CellOutput::new_builder()
+        .capacity(Capacity::bytes(73).expect("capacity").pack())
+        .lock(gen_custodian_lock_script(lock_args))
+        .type_(Some(dckb_script()).pack())
+        .build();
+    let data = dckb_data(dckb_amount.into(), height);
+    dummy
+        .cells
+        .insert(out_point.clone(), (cell.clone(), data.clone()));
+
+    (cell, data)
+}
+
 fn gen_dckb_cell(
     dummy: &mut DummyDataLoader,
-    capacity: Capacity,
-    lock_args: Bytes,
+    dckb_amount: u64,
     height: BlockNumber,
+    lock_args: Bytes,
 ) -> (CellOutput, OutPoint, Bytes) {
     let out_point = generate_random_out_point();
 
@@ -279,7 +306,7 @@ fn gen_dckb_cell(
         .lock(lock)
         .type_(Some(type_).pack())
         .build();
-    let data = dckb_data(capacity.as_u64().into(), height);
+    let data = dckb_data(dckb_amount.into(), height);
     dummy
         .cells
         .insert(out_point.clone(), (cell.clone(), data.clone()));
@@ -354,6 +381,19 @@ fn gen_secp256k1_lock_script(lock_args: Bytes) -> Script {
         .build()
 }
 
+fn gen_custodian_lock_script(lock_args: Bytes) -> Script {
+    Script::new_builder()
+        .args(
+            gen_secp256k1_lock_script(lock_args)
+                .calc_script_hash()
+                .as_bytes()
+                .pack(),
+        )
+        .code_hash(custodian_code_hash())
+        .hash_type(ScriptHashType::Data.into())
+        .build()
+}
+
 fn gen_dao_lock_lock_script(lock_hash: [u8; 32]) -> Script {
     let args: [u8; 64] = {
         let mut args = [0u8; 64];
@@ -388,6 +428,7 @@ fn complete_tx(
     };
     let (dckb_cell, dckb_out_point) = script_cell(&DCKB);
     let (dao_lock_cell, dao_lock_out_point) = script_cell(&DAO_LOCK);
+    let (custodian_lock_cell, custodian_lock_out_point) = script_cell(&CUSTODIAN_LOCK);
 
     let secp_cell_meta =
         CellMetaBuilder::from_cell_output(secp_cell.clone(), SIGHASH_ALL_BIN.clone())
@@ -407,6 +448,10 @@ fn complete_tx(
         CellMetaBuilder::from_cell_output(dao_lock_cell.clone(), DAO_LOCK.clone())
             .out_point(dao_lock_out_point.clone())
             .build();
+    let custodian_lock_cell_meta =
+        CellMetaBuilder::from_cell_output(custodian_lock_cell.clone(), CUSTODIAN_LOCK.clone())
+            .out_point(custodian_lock_out_point.clone())
+            .build();
 
     dummy
         .cells
@@ -424,6 +469,10 @@ fn complete_tx(
     dummy.cells.insert(
         dao_lock_out_point.clone(),
         (dao_lock_cell, DAO_LOCK.clone()),
+    );
+    dummy.cells.insert(
+        custodian_lock_out_point.clone(),
+        (custodian_lock_cell, CUSTODIAN_LOCK.clone()),
     );
 
     let tx = builder
@@ -457,6 +506,12 @@ fn complete_tx(
                 .dep_type(DepType::Code.into())
                 .build(),
         )
+        .cell_dep(
+            CellDep::new_builder()
+                .out_point(custodian_lock_out_point)
+                .dep_type(DepType::Code.into())
+                .build(),
+        )
         .build();
 
     let mut resolved_cell_deps = vec![];
@@ -465,6 +520,32 @@ fn complete_tx(
     resolved_cell_deps.push(dao_cell_meta);
     resolved_cell_deps.push(dckb_cell_meta);
     resolved_cell_deps.push(dao_lock_cell_meta);
+    resolved_cell_deps.push(custodian_lock_cell_meta);
 
     (tx, resolved_cell_deps)
+}
+
+fn calculate_dao_capacity(
+    occupied_capacity: u64,
+    deposit_data: &HeaderView,
+    align_target_data: &HeaderView,
+    original_capacity: u64,
+) -> u64 {
+    let deposit_accumulate_rate = {
+        let mut buf = [0u8; 8];
+        buf.copy_from_slice(&deposit_data.dao().as_bytes()[8..16]);
+        u64::from_le_bytes(buf)
+    };
+    let withdraw_accumulate_rate = {
+        let mut buf = [0u8; 8];
+        buf.copy_from_slice(&align_target_data.dao().as_bytes()[8..16]);
+        u64::from_le_bytes(buf)
+    };
+    let counted_capacity = original_capacity - occupied_capacity;
+
+    let withdraw_counted_capacity = (counted_capacity as u128) * (withdraw_accumulate_rate as u128)
+        / (deposit_accumulate_rate as u128);
+
+    let withdraw_capacity = occupied_capacity + (withdraw_counted_capacity as u64);
+    withdraw_capacity
 }

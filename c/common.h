@@ -61,6 +61,8 @@ typedef unsigned __int128 uint128_t;
 #define HASH_SIZE 32
 #define DAO_OCCUPIED_CAPACITY 14600000000         // 146 Bytes
 #define MAX_DEPOSIT_DAO_CAPACITY 100000000000000  // 100_0000 CKB
+#define HASH_TYPE_DATA 0
+#define HASH_TYPE_TYPE_ID 1
 
 #include "ckb_syscalls.h"
 #include "const.h"
@@ -77,6 +79,16 @@ typedef struct {
   uint128_t amount;
   uint32_t cell_index;
 } TokenInfo;
+
+int parse_dckb_data(uint128_t *amount, uint64_t *block_number, uint8_t *data,
+                    size_t data_len) {
+  if (data_len != UDT_LEN + BLOCK_NUM_LEN) {
+    return ERROR_LOAD_DCKB_DATA;
+  }
+  *amount = *(uint128_t *)data;
+  *block_number = *(uint64_t *)(data + UDT_LEN);
+  return CKB_SUCCESS;
+}
 
 int check_dao_lock(uint64_t i, uint64_t source) {
   uint8_t script[MAX_SCRIPT_SIZE];
@@ -103,7 +115,7 @@ int check_dao_lock(uint64_t i, uint64_t source) {
     return ERROR_INCORRECT_DAO_LOCK;
   }
   /* check hash type */
-  if (*hash_type_seg.ptr != 0) {
+  if (*hash_type_seg.ptr != HASH_TYPE_DATA) {
     printf("unexpected deposit lock hash type");
     return ERROR_INCORRECT_DAO_LOCK;
   }
@@ -209,11 +221,10 @@ int fetch_inputs(const uint8_t dckb_type_hash[HASH_SIZE],
       /* DCKB */
       uint128_t amount;
       uint64_t block_number;
-      if (len != UDT_LEN + BLOCK_NUM_LEN) {
-        return ERROR_LOAD_DCKB_DATA;
+      ret = parse_dckb_data(&amount, &block_number, buf, len);
+      if (ret != CKB_SUCCESS) {
+        return ret;
       }
-      amount = *(uint128_t *)buf;
-      block_number = *(uint64_t *)(buf + UDT_LEN);
       /* record input amount */
       int j = *input_dckb_cnt;
       *input_dckb_cnt += 1;
@@ -299,11 +310,10 @@ int fetch_outputs(const uint8_t dckb_type_hash[HASH_SIZE],
       /* check dckb cell */
       uint128_t amount;
       uint64_t block_number;
-      if (len != (UDT_LEN + BLOCK_NUM_LEN)) {
-        return ERROR_LOAD_DCKB_DATA;
+      ret = parse_dckb_data(&amount, &block_number, buf, len);
+      if (ret != CKB_SUCCESS) {
+        return ret;
       }
-      amount = *(uint128_t *)buf;
-      block_number = *(uint64_t *)(buf + UDT_LEN);
       printf("fetch output -> dckb block_number %ld", block_number);
       if (block_number == 0) {
         if (!new_dckb_cell_cnt || !new_dckb_cell) goto next;

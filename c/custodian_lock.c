@@ -20,8 +20,8 @@
 #include "ckb_utils.h"
 #include "common.h"
 
-/* since relative time 18 epochs(~ 72 hours) */
-#define PHASE2_TIMEOUT_SINCE 0xa000010000000012
+/* since relative time 42 epochs(~ 7 days) */
+#define PHASE2_TIMEOUT_SINCE 0xa00001000000002a
 
 int check_unlock_via_input(uint8_t unlock_input_cell_index) {
   uint8_t script[MAX_SCRIPT_SIZE];

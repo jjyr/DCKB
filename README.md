@@ -14,7 +14,7 @@ Known limitation:
 
 * After deposition, users need to wait for 4 epochs(~16 hours in mainnet) to use DCKB.
 * Max deposition limitation is 10_000_000 CKB at once.
-* NervosDAO withdrawing action must completed within 18 epochs(~ 72 hours).
+* NervosDAO withdrawal must be completed within 42 epochs(~ 7 days) since the withdrawal started; otherwise, anyone can unlock the cell.
 
 ## Build
 

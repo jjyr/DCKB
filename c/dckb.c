@@ -14,19 +14,15 @@
  * same block number.
  * 2. Align means we update the height of DCKB to a heigher block number,
  * and update the amount by apply NervosDAO formula.
- * 3. All inputs DCKB cell should has a index of dep_headers in the witness's
- * input_type, the index is denoted by a u8 number, which point to the header of
- * their current block number
- * 4. The first output DCKB cell should has a index of dep_headers in the
- * witness's output_type, the index is denoted by a u8 number, which point to a
- * block header that all outputs should align to.
+ * 3. The first input DCKB cell should has a u64 value in the witness args's
+ * input_type the value represents the align target block number.
  *
  * Verification:
  * This type script make sure the equation between inputs and outputs(all coins
  * are aligned):
  * 1. inputs DCKB >= outputs DCKB
  * 2. new DCKB == deposited NervosDAO
- * 3. all outputs DCKB's block number must align to aligned block number
+ * 3. all outputs DCKB's block number must align to align target block number
  *
  * Get DCKB:
  * 1. send a NervosDAO deposition request
@@ -67,8 +63,8 @@ int main() {
   }
   /* load aligned target header */
   dao_header_data_t align_target_data;
-  ret = load_dao_header_data_by_cell(0, CKB_SOURCE_GROUP_INPUT, 1, 0ul,
-                                     &align_target_data);
+  ret = load_align_target_dao_header_data(0, CKB_SOURCE_GROUP_INPUT,
+                                          &align_target_data);
   printf("load aligned target ret %d", ret);
   if (ret != CKB_SUCCESS && ret != ERROR_LOAD_DAO_HEADER_DATA) {
     return ret;

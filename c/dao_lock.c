@@ -458,9 +458,8 @@ int check_destroy_dckb_amount(uint8_t dckb_type_hash[HASH_SIZE],
   }
   /* calculate input dckb */
   dao_header_data_t align_target_data;
-  ret = load_dao_header_data_by_cell(input_dckb_cells[0].cell_index,
-                                     CKB_SOURCE_INPUT, 1, 0ul,
-                                     &align_target_data);
+  ret = load_align_target_dao_header_data(input_dckb_cells[0].cell_index,
+                                          CKB_SOURCE_INPUT, &align_target_data);
   printf("load aligned target ret %d", ret);
   if (ret != CKB_SUCCESS) {
     return ERROR_LOAD_DAO_HEADER_DATA;

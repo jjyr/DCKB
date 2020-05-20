@@ -384,10 +384,27 @@ int load_witness_lock_args(uint64_t index, uint64_t source, uint8_t *lock_arg,
   return CKB_SUCCESS;
 }
 
-int load_dao_header_data_by_cell(uint64_t i, uint64_t source,
-                                 int is_load_align_target,
-                                 uint64_t deposited_block_number,
-                                 dao_header_data_t *dao_header_data) {
+int search_dao_header_data(uint64_t expected_block_number,
+                           dao_header_data_t *dao_header_data) {
+  int ret;
+  int i = 0;
+  while (1) {
+    ret = load_dao_header_data(i, CKB_SOURCE_HEADER_DEP, dao_header_data);
+    if (ret != CKB_SUCCESS) {
+      return ERROR_LOAD_HEADER;
+    }
+    // find the header
+    if (dao_header_data->block_number == expected_block_number) {
+      return CKB_SUCCESS;
+    }
+    i++;
+  }
+
+  return ERROR_LOAD_HEADER;
+}
+
+int load_align_target_dao_header_data(uint64_t i, uint64_t source,
+                                      dao_header_data_t *dao_header_data) {
   int ret;
   uint64_t len = 0;
   uint8_t witness[MAX_WITNESS_SIZE];
@@ -417,33 +434,17 @@ int load_dao_header_data_by_cell(uint64_t i, uint64_t source,
   }
 
   mol_seg_t type_bytes_seg = MolReader_Bytes_raw_bytes(&type_seg);
-  // align target witness must contains two indexes
-  if (is_load_align_target && type_bytes_seg.size != 2) {
-    printf("bytes len is %d", type_bytes_seg.size);
-    return ERROR_LOAD_DAO_HEADER_DATA;
-  } else if (type_bytes_seg.size != 2 && type_bytes_seg.size != 1) {
+  // load align target block number from witness
+  if (type_bytes_seg.size != 8) {
     printf("bytes len is %d", type_bytes_seg.size);
     return ERROR_LOAD_DAO_HEADER_DATA;
   }
 
-  uint8_t index;
-  if (!is_load_align_target) {
-    index = *(uint8_t *)type_bytes_seg.ptr;
-  } else {
-    // align target is at index 1
-    index = *((uint8_t *)type_bytes_seg.ptr + 1);
-  };
+  uint64_t align_target_block_number = *(uint64_t *)type_bytes_seg.ptr;
 
-  ret = load_dao_header_data(index, CKB_SOURCE_HEADER_DEP, dao_header_data);
-  printf("load dao header data i %d ret %d", index, ret);
-  if (ret != CKB_SUCCESS && ret != CKB_INDEX_OUT_OF_BOUND) {
-    return ERROR_LOAD_HEADER;
-  }
-  if (!is_load_align_target &&
-      deposited_block_number != dao_header_data->block_number) {
-    printf(
-        "load dao header, deposited block number %ld loaded header number %ld",
-        deposited_block_number, dao_header_data->block_number);
+  ret = search_dao_header_data(align_target_block_number, dao_header_data);
+  printf("load dao header number %ld ret %d", align_target_block_number, ret);
+  if (ret != CKB_SUCCESS) {
     return ERROR_LOAD_HEADER;
   }
   return CKB_SUCCESS;
@@ -465,8 +466,7 @@ int align_dckb_cell(size_t i, size_t source,
     printf("new dckb deposit block %ld", deposit_data.block_number);
     deposited_block_number = deposit_data.block_number;
   } else {
-    int ret = load_dao_header_data_by_cell(i, source, 0, deposited_block_number,
-                                           &deposit_data);
+    int ret = search_dao_header_data(deposited_block_number, &deposit_data);
     printf("load dao header data by cell i %ld source %ld ret %d", i, source,
            ret);
     if (ret != CKB_SUCCESS) {

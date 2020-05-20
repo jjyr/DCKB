@@ -63,7 +63,7 @@ fn test_dckb_withdraw() {
 
     let resolved_inputs = vec![input_cell_meta, input_dckb_cell_meta];
     let mut resolved_cell_deps = vec![];
-    let align_target_index: u8 = 0;
+    let align_target_block_number: u64 = withdraw_header.number();
 
     let mut b = [0; 8];
     LittleEndian::write_u64(&mut b, 1);
@@ -71,7 +71,7 @@ fn test_dckb_withdraw() {
         .type_(Bytes::from(&b[..]).pack())
         .build();
     let dckb_witness = WitnessArgs::new_builder()
-        .type_(Bytes::from(vec![0, align_target_index]).pack())
+        .type_(Bytes::from(align_target_block_number.to_le_bytes().to_vec()).pack())
         .build();
     let builder = TransactionBuilder::default()
         .input(CellInput::new(previous_out_point, 0x2003e8022a0002f3))
@@ -152,14 +152,12 @@ fn test_dckb_transfer() {
 
     let resolved_inputs = vec![input_cell_meta, input_dckb_cell_meta];
     let mut resolved_cell_deps = vec![];
-    let align_target_index: u8 = 1;
+    let align_target_block_number: u64 = header2.number();
 
     let dckb_witness = WitnessArgs::new_builder()
-        .type_(Bytes::from(vec![0, align_target_index]).pack())
+        .type_(Bytes::from(align_target_block_number.to_le_bytes().to_vec()).pack())
         .build();
-    let dckb2_witness = WitnessArgs::new_builder()
-        .type_(Bytes::from(vec![0]).pack())
-        .build();
+    let dckb2_witness = WitnessArgs::default();
     // transfer 10000 from 1 to 2
     let builder = TransactionBuilder::default()
         .input(CellInput::new(dckb_previous_out_point1, 0))

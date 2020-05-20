@@ -105,7 +105,7 @@ fn test_dao_lock_phase1_unlock() {
         .type_(Bytes::from(&0u8.to_le_bytes()[..]).pack())
         .build();
     let dckb_witness = WitnessArgs::new_builder()
-        .type_(Bytes::from(vec![0u8, 0u8]).pack())
+        .type_(Bytes::from(deposit_header.number().to_le_bytes().to_vec()).pack())
         .build();
     let builder = TransactionBuilder::default()
         .input(CellInput::new(previous_out_point, 0))
@@ -258,9 +258,9 @@ fn test_dao_lock_phase2_unlock() {
         .lock(Bytes::from(vec![custodian_cell_index]).pack())
         .type_(Bytes::from(&1u64.to_le_bytes()[..]).pack())
         .build();
-    let align_target_index: u8 = 0;
+    let align_target_block_number: u64 = withdraw_header.number();
     let dckb_witness = WitnessArgs::new_builder()
-        .type_(Bytes::from(vec![0, align_target_index]).pack())
+        .type_(Bytes::from(align_target_block_number.to_le_bytes().to_vec()).pack())
         .build();
     let unlock_input_cell_index: u8 = 1;
     let custodian_cell_witness = WitnessArgs::new_builder()

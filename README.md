@@ -30,7 +30,7 @@ Contracts:
 * DAOLock - NervosDAO cell's lock script
 * CustodianLock - lock script, used for custodian DCKB while withdraw from NervosDAO
 
-[Documentation](https://github.com/jjyr/DCKB/wiki/Documentation)
+[Wiki](https://github.com/jjyr/DCKB/wiki)
 
 ## License
 
